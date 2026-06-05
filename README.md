@@ -27,7 +27,7 @@ State (current wallpaper index and accumulated active time) is written to a plai
 Clone the repository and run the installer:
 
 ```bash
-git clone https://github.com/yourusername/shrutz.git
+git clone https://github.com/burpcat/shrutz.git
 cd shrutz
 chmod +x shrutz install.sh
 ./install.sh
