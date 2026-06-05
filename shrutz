@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# ┌─────────────────────────────────────────────────────────────┐
+# │  shrutz — active-time wallpaper rotator                     │
+# │                                                             │
+# │  Script  : ~/.local/bin/shrutz                             │
+# │  Walls   : ~/.local/lib/shrutz/wallpapers/                 │
+# │  State   : ~/.local/lib/shrutz/state                       │
+# │  Log     : ~/.local/lib/shrutz/shrutz.log                  │
+# │  Agent   : ~/.local/etc/launchd/local.shrutz.plist         │
+# │            (symlinked → ~/Library/LaunchAgents/)           │
+# └─────────────────────────────────────────────────────────────┘
+
+# ── Paths ──────────────────────────────────────────────────────
+SHRUTZ_LIB="$HOME/.local/lib/shrutz"
+WALLPAPER_DIR="$SHRUTZ_LIB/wallpapers"
+STATE_FILE="$SHRUTZ_LIB/state"
+LOG_FILE="$SHRUTZ_LIB/shrutz.log"
+
+# ── Tunables ───────────────────────────────────────────────────
+ACTIVE_MINS=30        # minutes of real use before switching
+IDLE_THRESHOLD=60     # seconds without input → considered away
+CHECK_EVERY=30        # how often the loop wakes up (seconds)
+
+# ── Derived ────────────────────────────────────────────────────
+ACTIVE_SECS_NEEDED=$(( ACTIVE_MINS * 60 ))
+
+# ── Logging ────────────────────────────────────────────────────
+log() {
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE"
+}
+
+# ── Build wallpaper list ────────────────────────────────────────
+# find -print0 / sort -z / read -d '' handles filenames with spaces safely
+WALLPAPERS=()
+while IFS= read -r -d '' f; do
+    WALLPAPERS+=("$f")
+done < <(find "$WALLPAPER_DIR" -maxdepth 1 \
+    \( -iname "*.jpg"  -o -iname "*.jpeg" \
+    -o -iname "*.png"  -o -iname "*.heic" \
+    -o -iname "*.webp" \) \
+    -print0 | sort -z)
+
+TOTAL=${#WALLPAPERS[@]}
+if (( TOTAL == 0 )); then
+    log "ERROR: no images found in $WALLPAPER_DIR — exiting"
+    exit 1
+fi
+
+# ── Load state (survives reboots via the state file) ────────────
+# State is a bash-sourceable key=value file written by save_state():
+#   CURRENT_INDEX=3
+#   ACTIVE_SECONDS=420
+CURRENT_INDEX=0
+ACTIVE_SECONDS=0
+if [[ -f "$STATE_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$STATE_FILE"
+fi
+# Guard against stale index if wallpaper count changed
+(( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
+
+# ── Helpers ────────────────────────────────────────────────────
+
+# Query the kernel I/O Registry for how long HID devices have been idle.
+# ioreg -c IOHIDSystem reads the IOHIDSystem class from the I/O Registry.
+# HIDIdleTime is in nanoseconds → divide by 1_000_000_000 for seconds.
+idle_seconds() {
+    ioreg -c IOHIDSystem \
+        | awk '/HIDIdleTime/ { print int($NF / 1000000000); exit }'
+}
+
+# Use AppleScript via osascript to reach System Events,
+# which exposes every desktop (all monitors) as a scriptable object.
+apply_wallpaper() {
+    local path="$1"
+    osascript -e \
+        "tell application \"System Events\"
+            tell every desktop
+                set picture to \"$path\"
+            end tell
+        end tell" 2>/dev/null
+}
+
+save_state() {
+    printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\n' \
+        "$CURRENT_INDEX" "$ACTIVE_SECONDS" > "$STATE_FILE"
+}
+
+# ── Boot ───────────────────────────────────────────────────────
+log "shrutz started — $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
+apply_wallpaper "${WALLPAPERS[$CURRENT_INDEX]}"
+log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+
+# ── Main loop ──────────────────────────────────────────────────
+while true; do
+    sleep "$CHECK_EVERY"
+
+    idle=$(idle_seconds)
+
+    if (( idle < IDLE_THRESHOLD )); then
+        # User is active — accumulate real usage time
+        (( ACTIVE_SECONDS += CHECK_EVERY ))
+
+        if (( ACTIVE_SECONDS >= ACTIVE_SECS_NEEDED )); then
+            (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
+            apply_wallpaper "${WALLPAPERS[$CURRENT_INDEX]}"
+            ACTIVE_SECONDS=0
+            log "Switched → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+        fi
+    fi
+    # idle >= IDLE_THRESHOLD: user is away, timer freezes in place
+
+    save_state
+done
