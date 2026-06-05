@@ -15,7 +15,7 @@ SHRUTZ_LIB="$HOME/.local/lib/shrutz"
 WALLPAPER_DIR="$SHRUTZ_LIB/wallpapers"
 STATE_FILE="$SHRUTZ_LIB/state"
 LOG_FILE="$SHRUTZ_LIB/shrutz.log"
-DOCK_DB="$HOME/Library/Application Support/Dock/desktoppicture.db"
+WALLPAPER_STORE="$HOME/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
 
 # ── Tunables ───────────────────────────────────────────────────
 ACTIVE_MINS=30        # minutes of real use before switching
@@ -63,16 +63,14 @@ idle_seconds() {
 }
 
 # Read what is actually showing on the active Space right now.
-# System Events' desktop 1 always reflects the currently visible Space
-# on the primary display, so this is our ground-truth poll target.
 current_wallpaper() {
     osascript -e \
         'tell application "System Events" to get picture of desktop 1' \
         2>/dev/null | tr -d '\n'
 }
 
-# Fast apply to the current Space on every display.
-# Use this for mismatch corrections — no Dock restart needed.
+# Fast apply to the currently visible Space on every display.
+# Used for mismatch corrections — no agent restart needed.
 apply_to_current_space() {
     local path="$1"
     osascript -e \
@@ -83,46 +81,119 @@ apply_to_current_space() {
         end tell" 2>/dev/null
 }
 
-# Apply to ALL Mission Control Spaces by writing directly into
-# the Dock's wallpaper database, then restarting the Dock.
+# Write the new wallpaper path into every Space entry inside
+# Index.plist, then restart the wallpaper agent so it re-reads
+# the store and propagates the change to all Mission Control Spaces.
 #
-# How the Dock DB works:
-#   ~/Library/Application Support/Dock/desktoppicture.db is a SQLite
-#   database macOS uses to persist wallpaper assignments per Space and
-#   per display. The `data` table holds the file paths. Writing the new
-#   path to every row there, then restarting the Dock (which re-reads
-#   the DB on launch), is the only reliable way to push a wallpaper
-#   to every Space without switching to each one manually.
+# How Index.plist works (macOS 14+):
+#   The file lives at:
+#     ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist
+#   It is a binary plist with four top-level keys:
+#     AllSpacesAndDisplays  — idle/screensaver config (we leave this alone)
+#     SystemDefault         — fallback config for unassigned spaces
+#     Spaces                — dict keyed by Space UUID; each Space has:
+#                               Default    → the Space-level wallpaper
+#                               Displays   → per-display overrides within the Space
+#     Displays              — top-level display configs
 #
-# Dock restart takes ~1 second and is only triggered on an actual
-# wallpaper switch (every 30 mins of active use), not on every poll tick.
+#   The image path is NOT in the `Files` array (always empty).
+#   It is inside the `Configuration` field, which is itself a binary
+#   plist with shape:
+#     { 'type': 'imageFile', 'url': { 'relative': 'file:///path/to/img' } }
 #
-# Falls back to current-space-only if the DB is absent (macOS Sonoma+
-# changed the wallpaper storage backend; the fallback still works for
-# the visible Space and the poll will keep other spaces corrected).
+#   We rebuild that inner plist with the new path and write it back.
+#   The wallpaper agent is restarted via launchctl so it picks up the
+#   changes across all Spaces without requiring a full logout.
+#
+# Path is passed via WP_PATH env var to keep bash quoting simple and
+# handle filenames with spaces or special characters safely.
+write_index_plist() {
+    local path="$1"
+    local store="$WALLPAPER_STORE"
+
+    WP_PATH="$path" WP_STORE="$store" python3 << 'PYEOF'
+import plistlib, datetime, os, sys
+
+path  = os.environ['WP_PATH']
+store = os.environ['WP_STORE']
+
+# Build the inner Configuration binary plist for this image path
+config = plistlib.dumps(
+    {'type': 'imageFile', 'url': {'relative': f'file://{path}'}},
+    fmt=plistlib.FMT_BINARY
+)
+now = datetime.datetime.now()
+
+def patch_desktop(desktop):
+    """Rewrite the Configuration blob and touch LastSet on a Desktop entry."""
+    content = desktop.get('Content', {})
+    for choice in content.get('Choices', []):
+        # Only touch image choices — leave idle/video/dynamic entries alone
+        if choice.get('Provider') == 'com.apple.wallpaper.choice.image':
+            choice['Configuration'] = config
+            choice['Files'] = []
+    desktop['LastSet'] = now
+
+def patch_space(space):
+    """Update Default and every Display override within a Space."""
+    default = space.get('Default', {})
+    if 'Desktop' in default:
+        patch_desktop(default['Desktop'])
+    for disp in space.get('Displays', {}).values():
+        if 'Desktop' in disp:
+            patch_desktop(disp['Desktop'])
+
+try:
+    with open(store, 'rb') as f:
+        d = plistlib.load(f)
+
+    # SystemDefault — fallback for any Space not explicitly listed
+    if 'Desktop' in d.get('SystemDefault', {}):
+        patch_desktop(d['SystemDefault']['Desktop'])
+
+    # Every named Space
+    for space in d.get('Spaces', {}).values():
+        patch_space(space)
+
+    # Top-level Displays (cover display-level overrides outside a Space)
+    for disp in d.get('Displays', {}).values():
+        if 'Desktop' in disp:
+            patch_desktop(disp['Desktop'])
+
+    with open(store, 'wb') as f:
+        plistlib.dump(d, f, fmt=plistlib.FMT_BINARY)
+
+    print('ok')
+except Exception as e:
+    print(f'error: {e}', file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
 apply_all_spaces() {
     local path="$1"
-    # Escape single quotes for SQL safety
-    local escaped="${path//\'/\'\'}"
 
-    if [[ -f "$DOCK_DB" ]] && command -v sqlite3 &>/dev/null; then
-        sqlite3 "$DOCK_DB" \
-            "UPDATE data SET value='$escaped' WHERE value LIKE '/%';" \
-            2>/dev/null
-        if [[ $? -eq 0 ]]; then
-            # Restart Dock so it picks up the DB change across all spaces
-            killall Dock 2>/dev/null || true
-            # Brief pause for Dock to relaunch before AppleScript fires
-            sleep 1
-            apply_to_current_space "$path"
-            log "Applied to all spaces via Dock DB + restart"
-            return 0
-        fi
+    if [[ ! -f "$WALLPAPER_STORE" ]]; then
+        # Store absent — old macOS or unusual setup; fall back to AppleScript
+        apply_to_current_space "$path"
+        log "Wallpaper store not found — applied to current space only (poll will correct others)"
+        return
     fi
 
-    # Fallback: current space only (DB unavailable)
-    apply_to_current_space "$path"
-    log "Dock DB unavailable — applied to current space only (poll will correct others)"
+    if write_index_plist "$path"; then
+        # Restart the wallpaper agent so it re-reads Index.plist.
+        # launchctl kickstart -k kills the running instance and starts a fresh one.
+        # The gui/<uid>/ prefix targets the per-user launchd domain (not system-wide).
+        launchctl kickstart -k "gui/$(id -u)/com.apple.wallpaper.agent" 2>/dev/null || \
+            killall WallpaperAgent 2>/dev/null || true
+        sleep 1
+        # Belt-and-suspenders: also set via AppleScript for the active Space
+        apply_to_current_space "$path"
+        log "Applied to all spaces via Index.plist + agent reload"
+    else
+        apply_to_current_space "$path"
+        log "Index.plist write failed — applied to current space only (poll will correct others)"
+    fi
 }
 
 save_state() {
@@ -143,23 +214,21 @@ while true; do
 
     if (( idle < IDLE_THRESHOLD )); then
         # ── User is active ──────────────────────────────────────
-
         (( ACTIVE_SECONDS += CHECK_EVERY ))
 
         if (( ACTIVE_SECONDS >= ACTIVE_SECS_NEEDED )); then
             # ── Time to advance ─────────────────────────────────
-            # Full apply: write to Dock DB so every Space gets updated.
+            # Full apply: write Index.plist so every Space gets updated.
             (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
             apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
             ACTIVE_SECONDS=0
             log "Switched → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
 
         else
-            # ── Not yet time — but poll the active Space ────────
-            # If the user switched to a Space that still shows a
-            # different wallpaper (DB fallback case, or the Space was
-            # created after the last DB write), correct it immediately.
-            # This is a fast AppleScript call only — no Dock restart.
+            # ── Not yet time — poll the active Space ────────────
+            # Catches a Space that missed a previous Index.plist write,
+            # or where the agent reload hadn't propagated yet.
+            # Fast AppleScript only — no plist write, no agent restart.
             expected="${WALLPAPERS[$CURRENT_INDEX]}"
             current=$(current_wallpaper)
             if [[ "$current" != "$expected" ]]; then
