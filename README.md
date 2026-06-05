@@ -4,13 +4,19 @@
 
 Most wallpaper rotators switch on a wall-clock timer — they'll cycle while you're asleep, away from your desk, or your laptop is closed. shrutz measures *active usage* instead. The timer only ticks when your keyboard and mouse are live. Walk away, and it freezes exactly where it left off. Come back, and it resumes.
 
+Wallpapers are applied across every Mission Control Space, not just the one currently on screen.
+
 ---
 
 ## How it works
 
 shrutz runs as a background daemon via macOS `launchd`. Every 30 seconds it queries the kernel's I/O Registry (`ioreg`) for the `HIDIdleTime` value — the number of nanoseconds since your last keyboard or trackpad input. If that idle time is under 60 seconds, you're considered active, and 30 seconds are added to a running counter. Once the counter reaches 30 minutes of genuine active use, the wallpaper advances to the next image and the counter resets.
 
-State (current wallpaper index and accumulated active time) is written to a plain text file on every tick, so a reboot mid-session doesn't lose your progress. Wallpaper changes are applied with AppleScript via `System Events`, which targets every connected display simultaneously.
+**Multi-space coverage.** When a wallpaper switch happens, shrutz writes the new path into every row of the Dock's wallpaper database (`desktoppicture.db`) and restarts the Dock. The Dock re-reads the database on launch and propagates the change to every Mission Control Space simultaneously. This Dock restart takes roughly one second and only happens at the moment of a wallpaper change — not on every loop tick.
+
+**Space polling.** Every 30 seconds while you're active, shrutz reads the wallpaper currently showing on the active Space via AppleScript and compares it to what it expects. If they don't match — because you switched to a Space that missed a previous update, or because you're on a macOS version where the database approach isn't available — it reapplies the correct wallpaper immediately. This correction is a fast AppleScript call with no Dock restart.
+
+State (current wallpaper index and accumulated active time) is written to a plain text file on every tick, so a reboot mid-session doesn't lose your progress.
 
 ---
 
@@ -18,6 +24,7 @@ State (current wallpaper index and accumulated active time) is written to a plai
 
 - macOS 12 Monterey or later
 - bash (ships with macOS)
+- sqlite3 (ships with macOS)
 - No third-party dependencies
 
 ---
@@ -118,17 +125,21 @@ shrutz stop && shrutz start
 | Component | What it does |
 |---|---|
 | `ioreg -c IOHIDSystem` | Reads `HIDIdleTime` from the kernel I/O Registry — nanoseconds since last HID input |
-| `osascript` / System Events | Sets the desktop picture on every connected display via AppleScript |
+| `osascript` / System Events | Reads the active Space's current wallpaper and applies corrections instantly |
+| `desktoppicture.db` | Dock's SQLite wallpaper database — written on every switch to propagate across all Spaces |
+| Dock restart | Triggered once per wallpaper switch so the Dock re-reads the database |
+| Space poll | Every tick: reads `picture of desktop 1`, compares to expected, corrects if mismatched |
 | `launchd` | macOS init system (PID 1). Starts shrutz at login, restarts it if it exits |
-| `state` file | Bash-sourceable key=value file. Persists across reboots |
-| Main loop | `sleep 30` → check idle → accumulate → switch if threshold met → save state |
+| `state` file | Bash-sourceable key=value file. Persists index and active-time counter across reboots |
+
+**macOS Sonoma / Sequoia note.** Apple changed the wallpaper storage backend in macOS 14. If the Dock database is absent or uses a different schema, shrutz logs the fallback and switches to applying wallpapers to the active Space only via AppleScript. The poll loop then acts as the cross-space correction mechanism — each Space gets the right wallpaper the moment you land on it.
 
 ---
 
 ## Uninstall
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/local.shrutz.plist
+shrutz stop
 rm ~/Library/LaunchAgents/local.shrutz.plist
 rm -rf ~/.local/bin/shrutz ~/.local/lib/shrutz ~/.local/etc/launchd/local.shrutz.plist
 ```

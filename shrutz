@@ -15,6 +15,7 @@ SHRUTZ_LIB="$HOME/.local/lib/shrutz"
 WALLPAPER_DIR="$SHRUTZ_LIB/wallpapers"
 STATE_FILE="$SHRUTZ_LIB/state"
 LOG_FILE="$SHRUTZ_LIB/shrutz.log"
+DOCK_DB="$HOME/Library/Application Support/Dock/desktoppicture.db"
 
 # ── Tunables ───────────────────────────────────────────────────
 ACTIVE_MINS=30        # minutes of real use before switching
@@ -30,7 +31,6 @@ log() {
 }
 
 # ── Build wallpaper list ────────────────────────────────────────
-# find -print0 / sort -z / read -d '' handles filenames with spaces safely
 WALLPAPERS=()
 while IFS= read -r -d '' f; do
     WALLPAPERS+=("$f")
@@ -46,32 +46,34 @@ if (( TOTAL == 0 )); then
     exit 1
 fi
 
-# ── Load state (survives reboots via the state file) ────────────
-# State is a bash-sourceable key=value file written by save_state():
-#   CURRENT_INDEX=3
-#   ACTIVE_SECONDS=420
+# ── Load state ─────────────────────────────────────────────────
 CURRENT_INDEX=0
 ACTIVE_SECONDS=0
 if [[ -f "$STATE_FILE" ]]; then
     # shellcheck source=/dev/null
     source "$STATE_FILE"
 fi
-# Guard against stale index if wallpaper count changed
 (( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
 
 # ── Helpers ────────────────────────────────────────────────────
 
-# Query the kernel I/O Registry for how long HID devices have been idle.
-# ioreg -c IOHIDSystem reads the IOHIDSystem class from the I/O Registry.
-# HIDIdleTime is in nanoseconds → divide by 1_000_000_000 for seconds.
 idle_seconds() {
     ioreg -c IOHIDSystem \
         | awk '/HIDIdleTime/ { print int($NF / 1000000000); exit }'
 }
 
-# Use AppleScript via osascript to reach System Events,
-# which exposes every desktop (all monitors) as a scriptable object.
-apply_wallpaper() {
+# Read what is actually showing on the active Space right now.
+# System Events' desktop 1 always reflects the currently visible Space
+# on the primary display, so this is our ground-truth poll target.
+current_wallpaper() {
+    osascript -e \
+        'tell application "System Events" to get picture of desktop 1' \
+        2>/dev/null | tr -d '\n'
+}
+
+# Fast apply to the current Space on every display.
+# Use this for mismatch corrections — no Dock restart needed.
+apply_to_current_space() {
     local path="$1"
     osascript -e \
         "tell application \"System Events\"
@@ -81,6 +83,48 @@ apply_wallpaper() {
         end tell" 2>/dev/null
 }
 
+# Apply to ALL Mission Control Spaces by writing directly into
+# the Dock's wallpaper database, then restarting the Dock.
+#
+# How the Dock DB works:
+#   ~/Library/Application Support/Dock/desktoppicture.db is a SQLite
+#   database macOS uses to persist wallpaper assignments per Space and
+#   per display. The `data` table holds the file paths. Writing the new
+#   path to every row there, then restarting the Dock (which re-reads
+#   the DB on launch), is the only reliable way to push a wallpaper
+#   to every Space without switching to each one manually.
+#
+# Dock restart takes ~1 second and is only triggered on an actual
+# wallpaper switch (every 30 mins of active use), not on every poll tick.
+#
+# Falls back to current-space-only if the DB is absent (macOS Sonoma+
+# changed the wallpaper storage backend; the fallback still works for
+# the visible Space and the poll will keep other spaces corrected).
+apply_all_spaces() {
+    local path="$1"
+    # Escape single quotes for SQL safety
+    local escaped="${path//\'/\'\'}"
+
+    if [[ -f "$DOCK_DB" ]] && command -v sqlite3 &>/dev/null; then
+        sqlite3 "$DOCK_DB" \
+            "UPDATE data SET value='$escaped' WHERE value LIKE '/%';" \
+            2>/dev/null
+        if [[ $? -eq 0 ]]; then
+            # Restart Dock so it picks up the DB change across all spaces
+            killall Dock 2>/dev/null || true
+            # Brief pause for Dock to relaunch before AppleScript fires
+            sleep 1
+            apply_to_current_space "$path"
+            log "Applied to all spaces via Dock DB + restart"
+            return 0
+        fi
+    fi
+
+    # Fallback: current space only (DB unavailable)
+    apply_to_current_space "$path"
+    log "Dock DB unavailable — applied to current space only (poll will correct others)"
+}
+
 save_state() {
     printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\n' \
         "$CURRENT_INDEX" "$ACTIVE_SECONDS" > "$STATE_FILE"
@@ -88,7 +132,7 @@ save_state() {
 
 # ── Boot ───────────────────────────────────────────────────────
 log "shrutz started — $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
-apply_wallpaper "${WALLPAPERS[$CURRENT_INDEX]}"
+apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
 log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
 
 # ── Main loop ──────────────────────────────────────────────────
@@ -98,17 +142,34 @@ while true; do
     idle=$(idle_seconds)
 
     if (( idle < IDLE_THRESHOLD )); then
-        # User is active — accumulate real usage time
+        # ── User is active ──────────────────────────────────────
+
         (( ACTIVE_SECONDS += CHECK_EVERY ))
 
         if (( ACTIVE_SECONDS >= ACTIVE_SECS_NEEDED )); then
+            # ── Time to advance ─────────────────────────────────
+            # Full apply: write to Dock DB so every Space gets updated.
             (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
-            apply_wallpaper "${WALLPAPERS[$CURRENT_INDEX]}"
+            apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
             ACTIVE_SECONDS=0
             log "Switched → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+
+        else
+            # ── Not yet time — but poll the active Space ────────
+            # If the user switched to a Space that still shows a
+            # different wallpaper (DB fallback case, or the Space was
+            # created after the last DB write), correct it immediately.
+            # This is a fast AppleScript call only — no Dock restart.
+            expected="${WALLPAPERS[$CURRENT_INDEX]}"
+            current=$(current_wallpaper)
+            if [[ "$current" != "$expected" ]]; then
+                apply_to_current_space "$expected"
+                log "Mismatch on active space — reapplied: $(basename "$expected")"
+            fi
         fi
+
     fi
-    # idle >= IDLE_THRESHOLD: user is away, timer freezes in place
+    # idle >= IDLE_THRESHOLD: user is away, timer and poll both pause
 
     save_state
 done
