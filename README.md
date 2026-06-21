@@ -184,16 +184,27 @@ Each `config` call patches the script in-place and restarts the daemon immediate
 
 ## Uninstall
 
+shrutz uninstalls itself. You don't need to remember any paths.
+
+**Remove the binary, keep your wallpapers:**
+
 ```bash
-shrutz stop
-rm ~/Library/LaunchAgents/local.shrutz.plist
-rm -rf ~/.local/bin/shrutz \
-       ~/.local/lib/shrutz \
-       ~/.local/etc/launchd/local.shrutz.plist \
-       ~/.local/share/man/man1/shrutz.1
+shrutz dieanddontcomeback
 ```
 
-Remove the `PATH` and `MANPATH` lines added by the installer from your `.zshrc` or `.bashrc`.
+Asks `really?` — type anything containing `yes` to confirm. Stops the daemon and removes the binary. Your sets, state, and logs under `~/.local/lib/shrutz/` are left completely untouched.
+
+**Full wipe — removes everything:**
+
+```bash
+shrutz dieanddontcomeback --ever
+# or
+shrutz dieanddontcomeback -e
+```
+
+Same prompt. On confirmation: stops the daemon, removes the binary, the launchd plist, the man page, and the entire `~/.local/lib/shrutz/` tree including all your wallpaper sets. Also strips the `PATH` and `MANPATH` lines from your `.zshrc` and `.bashrc`.
+
+There is no undo.
 
 ---
 
@@ -204,6 +215,8 @@ Remove the `PATH` and `MANPATH` lines added by the installer from your `.zshrc` 
 **Wallpaper sets.** Images are now organised into named sets under `wallpapers/<set>/`. Use `shrutz switch <set>` to change pools instantly. The active-time counter is never reset by a switch — it always keeps ticking.
 
 **Binary CLI.** shrutz is now a direct binary on `$PATH`. No shell function is injected into `.zshrc` or `.bashrc` (beyond the `PATH` export). Every subcommand — `next`, `switch`, `import`, `dash` — is a real binary invocation.
+
+**`shrutz dieanddontcomeback [--ever|-e]`.** Self-uninstall command. Without flags: removes the binary after confirmation, leaving wallpaper sets and state intact. With `--ever` or `-e`: full wipe — binary, launchd agent, man page, all sets and state, and the installer's shell RC entries. Both modes prompt `really?` and require a response containing `yes` to proceed.
 
 **`shrutz import <path> [--set <name>]`.** Copy images from a file or directory into a set. Deduplicates by filename. Refreshes the set's `__init__` image count automatically.
 

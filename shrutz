@@ -1016,6 +1016,55 @@ cmd_update() {
     echo "shrutz: update complete"
 }
 
+# ── shrutz dieanddontcomeback [--ever|-e] ─────────────────────
+cmd_dieanddontcomeback() {
+    local full=0
+    [[ "${1:-}" == "--ever" || "${1:-}" == "-e" ]] && full=1
+
+    if (( full == 0 )); then
+        # Soft delete — binary only
+        printf 'really? '
+        read -r answer
+        [[ "$answer" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
+
+        # Stop the daemon first so launchd doesn't restart a ghost
+        launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist" 2>/dev/null || true
+
+        rm -f "$HOME/.local/bin/shrutz"
+        echo "shrutz: binary removed. your wallpapers and sets are untouched."
+        echo "shrutz: to finish the job: shrutz dieanddontcomeback --ever"
+        echo "shrutz: (you'll need to run that from the repo directly now)"
+
+    else
+        # Full wipe — no going back
+        printf 'really? '
+        read -r answer
+        [[ "$answer" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
+
+        echo "shrutz: stopping daemon..."
+        launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist" 2>/dev/null || true
+
+        echo "shrutz: removing files..."
+        rm -f  "$HOME/.local/bin/shrutz"
+        rm -f  "$HOME/Library/LaunchAgents/local.shrutz.plist"
+        rm -f  "$HOME/.local/etc/launchd/local.shrutz.plist"
+        rm -f  "$HOME/.local/share/man/man1/shrutz.1"
+        rm -rf "$HOME/.local/lib/shrutz"
+
+        echo "shrutz: cleaning shell config..."
+        for RC in "$HOME/.zshrc" "$HOME/.bashrc"; do
+            [[ -f "$RC" ]] || continue
+            # Remove PATH line added by installer
+            sed -i '' '/# Added by shrutz installer/d' "$RC" 2>/dev/null || true
+            sed -i '' '/\.local\/bin.*PATH/d'           "$RC" 2>/dev/null || true
+            sed -i '' '/local\/share\/man.*MANPATH/d'   "$RC" 2>/dev/null || true
+        done
+
+        echo "shrutz: gone. your wallpapers were in ~/.local/lib/shrutz/wallpapers/ — also gone."
+        echo "shrutz: goodbye."
+    fi
+}
+
 # ══════════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ══════════════════════════════════════════════════════════════════
@@ -1044,6 +1093,7 @@ case "${1:-daemon}" in
     dash)         cmd_dash ;;
     export)       shift; cmd_export "$@" ;;
     update)       cmd_update ;;
+    dieanddontcomeback) shift; cmd_dieanddontcomeback "$@" ;;
     -h|--help|help)
         echo "Usage: shrutz <command> [args]"
         echo ""
@@ -1084,6 +1134,12 @@ case "${1:-daemon}" in
         echo "  config                    show tunables"
         echo "  config <key> <val>        set a tunable and restart daemon"
         echo "                            keys: ACTIVE_MINS IDLE_THRESHOLD CHECK_EVERY"
+        echo ""
+        echo "  Nuclear"
+        echo "  ──────────────────────────────────────────────────"
+        echo "  dieanddontcomeback        remove the binary (keeps your wallpapers)"
+        echo "  dieanddontcomeback -e     full uninstall — removes everything"
+        echo "  dieanddontcomeback --ever same as -e"
         echo ""
         ;;
     *)
