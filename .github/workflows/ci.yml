@@ -1,0 +1,51 @@
+iname: shrutz CI
+
+on:
+  push:
+    branches:
+      - feat/adds
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: Run bats test suite
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bats-core
+        run: brew install bats-core
+
+      - name: Make shrutz executable
+        run: chmod +x shrutz
+
+      - name: Run tests
+        run: bats shrutz.bats
+
+  merge:
+    name: Merge feat/adds → master
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/feat/adds' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge feat/adds into master
+        run: |
+          git checkout master
+          git merge --ff-only origin/feat/adds
+          git push origin master

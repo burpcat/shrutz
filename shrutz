@@ -119,8 +119,10 @@ daemon_pid() {
 restart_daemon() {
     local pid
     pid=$(daemon_pid)
-    [[ -n "$pid" ]] && kill "$pid" 2>/dev/null
-    # launchd KeepAlive=true restarts it automatically within ~1s
+    if [[ -n "$pid" ]]; then
+        kill "$pid" 2>/dev/null || true
+    fi
+    return 0
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -703,7 +705,7 @@ cmd_config() {
     [[ "$val" =~ ^[0-9]+$ ]] || die "value must be a positive integer"
 
     # In-place sed edit on the script
-    sed -i '' "s/^${key}=[0-9]*/${key}=${val}/" "$script"
+    sed -i '' "s/^\(${key}=\)[0-9]*/\1${val}/" "$script"
     echo "shrutz: $key set to $val"
 
     # Restart daemon so it picks up new tunables
@@ -813,13 +815,25 @@ cmd_import() {
 # Internal: copy supported images from src (file or dir) into dest dir.
 _import_into() {
     local src="$1" dest="$2"
-    local added=0 skipped=0
+    local added=0 skipped=0 fname
 
     if [[ -f "$src" ]]; then
-        _import_file "$src" "$dest" added skipped
+        fname=$(basename "$src")
+        if [[ -f "$dest/$fname" ]]; then
+            (( skipped++ )) || true
+        else
+            cp "$src" "$dest/$fname"
+            (( added++ )) || true
+        fi
     elif [[ -d "$src" ]]; then
         while IFS= read -r -d '' f; do
-            _import_file "$f" "$dest" added skipped
+            fname=$(basename "$f")
+            if [[ -f "$dest/$fname" ]]; then
+                (( skipped++ )) || true
+            else
+                cp "$f" "$dest/$fname"
+                (( added++ )) || true
+            fi
         done < <(find "$src" -maxdepth 1 \
             \( -iname "*.jpg"  -o -iname "*.jpeg" \
             -o -iname "*.png"  -o -iname "*.heic" \
@@ -830,20 +844,6 @@ _import_into() {
     fi
 
     echo "shrutz: $added added, $skipped skipped (duplicate filename)"
-}
-
-_import_file() {
-    local src="$1" dest="$2"
-    local -n _added=$3 _skipped=$4
-    local fname
-    fname=$(basename "$src")
-
-    if [[ -f "$dest/$fname" ]]; then
-        (( _skipped++ )) || true
-    else
-        cp "$src" "$dest/$fname"
-        (( _added++ )) || true
-    fi
 }
 
 # ── shrutz dash ───────────────────────────────────────────────
