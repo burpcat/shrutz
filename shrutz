@@ -1025,7 +1025,8 @@ cmd_dieanddontcomeback() {
         # Soft delete — binary only
         printf 'really? '
         read -r answer
-        [[ "$answer" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
+        local answer_lower; answer_lower=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+        [[ "$answer_lower" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
 
         # Stop the daemon first so launchd doesn't restart a ghost
         launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist" 2>/dev/null || true
@@ -1039,7 +1040,8 @@ cmd_dieanddontcomeback() {
         # Full wipe — no going back
         printf 'really? '
         read -r answer
-        [[ "$answer" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
+        local answer_lower; answer_lower=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+        [[ "$answer_lower" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
 
         echo "shrutz: stopping daemon..."
         launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist" 2>/dev/null || true
