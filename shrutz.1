@@ -1,0 +1,267 @@
+.TH SHRUTZ 1 "2025" "shrutz" "User Commands"
+.SH NAME
+shrutz \- active-time wallpaper rotator for macOS
+.SH SYNOPSIS
+.B shrutz
+.I command
+.RI [ args ]
+.SH DESCRIPTION
+.B shrutz
+is a wallpaper rotation daemon for macOS that only counts time you are
+actively using your computer. The timer ticks only when keyboard or mouse
+input has been detected within the last 60 seconds. Walk away and the
+timer freezes exactly where it left off.
+.PP
+Wallpapers are applied across every Mission Control Space simultaneously
+by writing directly into the macOS wallpaper store
+.RI ( Index.plist )
+and restarting the wallpaper agent.
+.PP
+Images are organised into named
+.I sets
+under
+.IR ~/.local/lib/shrutz/wallpapers/ .
+Only one set is active at a time. Switching sets changes the wallpaper
+pool immediately without resetting the active-time counter.
+.SH DAEMON COMMANDS
+.TP
+.B shrutz status
+Show whether the launchd daemon is running, its PID, and last exit code.
+.TP
+.B shrutz start
+Load and start the launchd agent.
+.TP
+.B shrutz stop
+Unload and stop the launchd agent.
+.TP
+.B shrutz log
+Stream the live activity log with
+.BR tail (1).
+Interrupt with Ctrl-C.
+.TP
+.B shrutz update
+Pull the latest version from the git repository recorded at install time,
+re-run
+.BR install.sh ,
+and restart the daemon. Requires the repo to still be present on disk.
+.SH PLAYBACK COMMANDS
+.TP
+.B shrutz now
+Print the current wallpaper filename, set name, position in the set,
+active-time progress, and time remaining until the next switch.
+Appends
+.B [PAUSED]
+if the timer is frozen.
+.TP
+.B shrutz next
+Advance immediately to the next wallpaper. The active-time counter is
+not affected.
+.TP
+.B shrutz prev
+Go back to the previous wallpaper. The active-time counter is
+not affected.
+.TP
+.B shrutz pause
+Freeze the active-time counter. The daemon keeps running and the
+wallpaper stays put until
+.B shrutz resume
+is called.
+.TP
+.B shrutz resume
+Unfreeze the active-time counter.
+.TP
+.B shrutz dash
+Open a live terminal dashboard that refreshes every 5 seconds.
+Displays the current wallpaper, timer progress bar, daemon uptime,
+total switch count, and the last five history entries.
+Press
+.B q
+to exit.
+.SH SET COMMANDS
+.TP
+.B shrutz sets
+List all wallpaper sets with image count, creation date, and a marker
+indicating the active set.
+.TP
+.BI "shrutz set create " "name " [ source-path ]
+Create a new wallpaper set. If
+.I source-path
+is provided, images from that path are imported into the new set
+immediately.
+.TP
+.BI "shrutz set delete " name
+Delete a wallpaper set and all its images after a confirmation prompt.
+The active set cannot be deleted; switch to another set first.
+.TP
+.BI "shrutz set rename " "old new"
+Rename a wallpaper set. If the renamed set is currently active,
+.B ACTIVE_SET
+in the state file is updated and the daemon is restarted.
+.TP
+.BI "shrutz set info " name
+Show detailed information about a set: creation date, image count, disk
+usage. For the active set, also shows current position and timer progress.
+.TP
+.BI "shrutz set shuffle " "name " "on" | "off"
+Enable or disable shuffle mode for a set. When enabled, the daemon
+generates a random play order that covers every image before repeating.
+The active-time counter is not affected when shuffle is toggled.
+.TP
+.BI "shrutz switch " set
+Switch the active wallpaper set. The wallpaper changes immediately and
+position resets to the first image of the new set. The active-time
+counter is preserved.
+.TP
+.BI "shrutz import " path " [" --set " " name ]"
+Copy supported images from
+.I path
+(a file or directory) into the active set. Use
+.B --set
+.I name
+to import into a specific set without switching to it. Duplicates
+(matched by filename) are skipped. Supported formats:
+.BR .jpg ,
+.BR .jpeg ,
+.BR .png ,
+.BR .heic ,
+.BR .webp .
+.TP
+.BI "shrutz export " "set " [ destination ]
+Create a
+.B .zip
+archive of a wallpaper set including its metadata. Destination defaults
+to
+.IR ~/Desktop .
+.SH INFO COMMANDS
+.TP
+.B shrutz stats
+Show daemon uptime, total wallpaper switches, number of sets, total
+image count, active set name, and current timer progress.
+.TP
+.BI "shrutz history " [ n ]
+Show the last
+.I n
+wallpaper switches from the activity log, formatted as a table with
+timestamp, position, and filename.
+.I n
+defaults to 10.
+.TP
+.B shrutz config
+Print the current tunable values.
+.TP
+.BI "shrutz config " "key value"
+Set a tunable and restart the daemon so it takes effect immediately.
+Valid keys:
+.RS
+.TP
+.B ACTIVE_MINS
+Minutes of real active use before advancing to the next wallpaper.
+Default: 30.
+.TP
+.B IDLE_THRESHOLD
+Seconds without keyboard or mouse input before the user is considered
+away and the timer freezes. Default: 60.
+.TP
+.B CHECK_EVERY
+How often the daemon polls idle time and checks for mismatches, in
+seconds. Default: 30.
+.RE
+.SH FILES
+.TP
+.I ~/.local/bin/shrutz
+The main executable.
+.TP
+.I ~/.local/lib/shrutz/wallpapers/<set>/
+Wallpaper image directories. Each set contains a
+.B __init__
+metadata file (name, created date, image count, optional shuffle flag).
+.TP
+.I ~/.local/lib/shrutz/state
+Bash-sourceable key=value file persisting runtime state across reboots:
+.BR CURRENT_INDEX ,
+.BR ACTIVE_SECONDS ,
+.BR ACTIVE_SET ,
+.BR PAUSED ,
+.BR PLAY_ORDER ,
+.BR SHRUTZ_REPO .
+.TP
+.I ~/.local/lib/shrutz/shrutz.log
+Activity log. Written by the daemon on every significant event.
+.TP
+.I ~/.local/lib/shrutz/shrutz.err
+Standard error output from the daemon. Useful for crash diagnosis.
+.TP
+.I ~/.local/etc/launchd/local.shrutz.plist
+launchd agent definition. Source of truth; symlinked into
+.IR ~/Library/LaunchAgents/ .
+.TP
+.I ~/Library/Application\ Support/com.apple.wallpaper/Store/Index.plist
+macOS wallpaper store (binary plist). Written by shrutz on every
+wallpaper switch to update all Mission Control Spaces simultaneously.
+.SH SIGNALS
+The daemon responds to the following signals:
+.TP
+.B SIGUSR1
+Advance to the next wallpaper immediately (sent by
+.BR "shrutz next" ).
+.TP
+.B SIGUSR2
+Go back to the previous wallpaper (sent by
+.BR "shrutz prev" ).
+.TP
+.B SIGHUP
+Toggle pause/resume (sent by
+.B shrutz pause
+and
+.BR "shrutz resume" ).
+.TP
+.B SIGTERM
+Restart (sent by
+.BR "shrutz switch" ,
+.BR "shrutz set rename" ,
+and
+.BR "shrutz config" ).
+launchd with
+.B KeepAlive=true
+restarts the daemon automatically.
+.SH REQUIREMENTS
+macOS 14 Sonoma or later. bash and python3 (both ship with macOS).
+No third-party dependencies.
+.SH INSTALLATION
+.nf
+git clone https://github.com/yourusername/shrutz.git
+cd shrutz
+chmod +x shrutz install.sh
+./install.sh
+.fi
+.PP
+After installation, reload your shell and drop images into
+.IR ~/.local/lib/shrutz/wallpapers/default/ ,
+or use
+.B shrutz import
+to bring them in.
+.SH UNINSTALL
+.nf
+shrutz stop
+rm ~/Library/LaunchAgents/local.shrutz.plist
+rm -rf ~/.local/bin/shrutz \\
+       ~/.local/lib/shrutz \\
+       ~/.local/etc/launchd/local.shrutz.plist \\
+       ~/.local/share/man/man1/shrutz.1
+.fi
+.PP
+Also remove the
+.B PATH
+and
+.B MANPATH
+lines added by the installer from your
+.I .zshrc
+or
+.IR .bashrc .
+.SH SEE ALSO
+.BR launchctl (1),
+.BR launchd (8),
+.BR osascript (1),
+.BR ioreg (8)
+.SH LICENSE
+MIT

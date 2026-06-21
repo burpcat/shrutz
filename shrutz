@@ -44,12 +44,15 @@ load_state() {
     ACTIVE_SECONDS=0
     ACTIVE_SET="default"
     PAUSED=0
+    PLAY_ORDER=""        # space-separated shuffle order; empty = sequential
+    SHRUTZ_REPO=""       # path to the git repo, set by installer
     [[ -f "$STATE_FILE" ]] && source "$STATE_FILE"
 }
 
 save_state() {
-    printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\nACTIVE_SET=%s\nPAUSED=%d\n' \
-        "$CURRENT_INDEX" "$ACTIVE_SECONDS" "$ACTIVE_SET" "$PAUSED" > "$STATE_FILE"
+    printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\nACTIVE_SET=%s\nPAUSED=%d\nPLAY_ORDER=%s\nSHRUTZ_REPO=%s\n' \
+        "$CURRENT_INDEX" "$ACTIVE_SECONDS" "$ACTIVE_SET" "$PAUSED" \
+        "$PLAY_ORDER" "$SHRUTZ_REPO" > "$STATE_FILE"
 }
 
 # Resolve the active wallpaper directory from state.
@@ -231,7 +234,7 @@ run_daemon() {
 
     WALLPAPER_DIR="$WALLPAPER_BASE/$ACTIVE_SET"
 
-    # Build wallpaper list
+    # Build wallpaper list (always sorted — shuffle reorders via PLAY_ORDER)
     WALLPAPERS=()
     while IFS= read -r -d '' f; do
         WALLPAPERS+=("$f")
@@ -249,25 +252,79 @@ run_daemon() {
 
     (( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
 
+    # ── Shuffle setup ──────────────────────────────────────────
+    # If the active set has shuffle=true in __init__, we maintain
+    # a PLAY_ORDER array — a permutation of 0..TOTAL-1 indices.
+    # CURRENT_INDEX then points into PLAY_ORDER, not directly into WALLPAPERS.
+    # On exhaustion we reshuffle. Sequential sets leave PLAY_ORDER empty.
+
+    SHUFFLE_MODE=0
+    local set_shuffle
+    set_shuffle=$(init_field "$WALLPAPER_DIR" "shuffle")
+    [[ "$set_shuffle" == "true" ]] && SHUFFLE_MODE=1
+
+    # Rebuild or validate PLAY_ORDER
+    _build_play_order() {
+        PLAY_ORDER=$(python3 -c "
+import random, sys
+n = int(sys.argv[1])
+order = list(range(n))
+random.shuffle(order)
+print(' '.join(map(str, order)))
+" "$TOTAL")
+        log "shuffle: new play order generated for $TOTAL images"
+    }
+
+    if (( SHUFFLE_MODE == 1 )); then
+        local order_count
+        order_count=$(echo "$PLAY_ORDER" | wc -w | tr -d ' ')
+        # Regenerate if empty or stale (different total than current)
+        if [[ -z "$PLAY_ORDER" ]] || (( order_count != TOTAL )); then
+            _build_play_order
+            CURRENT_INDEX=0
+        fi
+    fi
+
+    # Resolve the actual wallpaper path from index (shuffle-aware)
+    _resolve_wallpaper() {
+        if (( SHUFFLE_MODE == 1 )); then
+            local order=($PLAY_ORDER)
+            echo "${WALLPAPERS[${order[$CURRENT_INDEX]}]}"
+        else
+            echo "${WALLPAPERS[$CURRENT_INDEX]}"
+        fi
+    }
+
+    # Advance index; reshuffle when the shuffle set wraps around
+    _advance_index() {
+        (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
+        if (( SHUFFLE_MODE == 1 )) && (( CURRENT_INDEX == 0 )); then
+            _build_play_order
+        fi
+    }
+
+    _retreat_index() {
+        (( CURRENT_INDEX = (CURRENT_INDEX - 1 + TOTAL) % TOTAL ))
+    }
+
     # ── Signal handlers ────────────────────────────────────────
-    # SIGUSR1 → next wallpaper immediately (timer untouched)
     trap '_sig_next' USR1
-    # SIGUSR2 → prev wallpaper immediately (timer untouched)
     trap '_sig_prev' USR2
-    # SIGHUP  → toggle pause/resume
     trap '_sig_pause_toggle' HUP
 
     _sig_next() {
-        (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
-        apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
-        log "next → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}") (timer unchanged)"
+        _advance_index
+        local wp; wp=$(_resolve_wallpaper)
+        apply_all_spaces "$wp"
+        log "next → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$wp") (timer unchanged)"
         save_state
     }
 
     _sig_prev() {
-        (( CURRENT_INDEX = (CURRENT_INDEX - 1 + TOTAL) % TOTAL ))
-        apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
-        log "prev → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}") (timer unchanged)"
+        _retreat_index
+        local wp; wp=$(_resolve_wallpaper)
+        apply_all_spaces "$wp"
+        log "prev → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$wp") (timer unchanged)"
         save_state
     }
 
@@ -282,10 +339,14 @@ run_daemon() {
         save_state
     }
 
-    log "shrutz started — set='$ACTIVE_SET' $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
+    local shuffle_label=""
+    (( SHUFFLE_MODE == 1 )) && shuffle_label=" [shuffle]"
+    log "shrutz started — set='$ACTIVE_SET'${shuffle_label} $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
     [[ "$PAUSED" == "1" ]] && log "note: starting in paused state"
-    apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
-    log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+
+    local current_wp; current_wp=$(_resolve_wallpaper)
+    apply_all_spaces "$current_wp"
+    log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$current_wp")"
 
     while true; do
         sleep "$CHECK_EVERY"
@@ -296,14 +357,15 @@ run_daemon() {
             (( ACTIVE_SECONDS += CHECK_EVERY ))
 
             if (( ACTIVE_SECONDS >= ACTIVE_SECS_NEEDED )); then
-                (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
-                apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
+                _advance_index
+                local wp; wp=$(_resolve_wallpaper)
+                apply_all_spaces "$wp"
                 ACTIVE_SECONDS=0
-                log "Switched → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+                log "Switched → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$wp")"
 
             else
-                expected="${WALLPAPERS[$CURRENT_INDEX]}"
-                current=$(current_wallpaper)
+                local expected; expected=$(_resolve_wallpaper)
+                local current; current=$(current_wallpaper)
                 if [[ "$current" != "$expected" ]]; then
                     apply_to_current_space "$expected"
                     log "Mismatch on active space — reapplied: $(basename "$expected")"
@@ -366,8 +428,9 @@ cmd_set() {
         delete)  cmd_set_delete "$@" ;;
         rename)  cmd_set_rename "$@" ;;
         info)    cmd_set_info   "$@" ;;
+        shuffle) cmd_set_shuffle "$@" ;;
         *)
-            echo "Usage: shrutz set <create|delete|rename|info> [args]"
+            echo "Usage: shrutz set <create|delete|rename|info|shuffle> [args]"
             exit 1
             ;;
     esac
@@ -470,6 +533,41 @@ cmd_set_info() {
         echo "  Position:   image $(( CURRENT_INDEX + 1 )) of $images"
     fi
     echo ""
+}
+
+cmd_set_shuffle() {
+    local name="${1:-}" mode="${2:-}"
+    [[ -z "$name" || -z "$mode" ]] && die "Usage: shrutz set shuffle <name> <on|off>"
+    [[ "$mode" != "on" && "$mode" != "off" ]] && die "mode must be 'on' or 'off'"
+
+    local dir="$WALLPAPER_BASE/$name"
+    [[ -d "$dir" ]] || die "set '$name' does not exist"
+
+    local init="$dir/__init__"
+    local flag; [[ "$mode" == "on" ]] && flag="true" || flag="false"
+
+    if [[ -f "$init" ]]; then
+        if grep -q '^shuffle=' "$init"; then
+            local tmp; tmp=$(grep -v '^shuffle=' "$init")
+            printf '%s\nshuffle=%s\n' "$tmp" "$flag" > "$init"
+        else
+            printf 'shuffle=%s\n' "$flag" >> "$init"
+        fi
+    else
+        printf 'name=%s\ncreated=%s\nimages=%s\nshuffle=%s\n' \
+            "$name" "$(date '+%Y-%m-%d %H:%M:%S')" "$(count_images "$dir")" "$flag" > "$init"
+    fi
+
+    echo "shrutz: shuffle $mode for set '$name'"
+
+    load_state
+    if [[ "$ACTIVE_SET" == "$name" ]]; then
+        # Clear stale play order so daemon regenerates on restart
+        PLAY_ORDER=""
+        save_state
+        restart_daemon
+        echo "shrutz: daemon restarted with shuffle $mode"
+    fi
 }
 
 # ── shrutz switch ──────────────────────────────────────────────
@@ -748,6 +846,176 @@ _import_file() {
     fi
 }
 
+# ── shrutz dash ───────────────────────────────────────────────
+cmd_dash() {
+    # Requires a terminal. Exit cleanly on q or Ctrl-C.
+    command -v tput &>/dev/null || die "tput not available — dash requires a terminal"
+
+    local DASH_REFRESH=5
+    local hide_cursor show_cursor clear_screen
+    hide_cursor=$(tput civis 2>/dev/null || true)
+    show_cursor=$(tput cnorm 2>/dev/null || true)
+    clear_screen=$(tput clear 2>/dev/null || true)
+
+    # Restore cursor on exit
+    trap "printf '%s' \"$show_cursor\"; tput rmcup 2>/dev/null; exit 0" INT TERM EXIT
+
+    tput smcup 2>/dev/null || true
+    printf '%s' "$hide_cursor"
+
+    while true; do
+        load_state
+
+        local wallpaper_dir="$WALLPAPER_BASE/$ACTIVE_SET"
+        local total; total=$(count_images "$wallpaper_dir")
+        local shuffle_flag; shuffle_flag=$(init_field "$wallpaper_dir" "shuffle")
+
+        # Resolve current wallpaper name
+        local current_name="(unknown)"
+        if (( total > 0 )); then
+            local files=()
+            while IFS= read -r -d '' f; do
+                files+=("$f")
+            done < <(find "$wallpaper_dir" -maxdepth 1 \
+                \( -iname "*.jpg" -o -iname "*.jpeg" \
+                -o -iname "*.png" -o -iname "*.heic" \
+                -o -iname "*.webp" \) \
+                -print0 | sort -z)
+            if (( CURRENT_INDEX < ${#files[@]} )); then
+                if [[ -n "$PLAY_ORDER" && "$shuffle_flag" == "true" ]]; then
+                    local order=($PLAY_ORDER)
+                    current_name=$(basename "${files[${order[$CURRENT_INDEX]}]}")
+                else
+                    current_name=$(basename "${files[$CURRENT_INDEX]}")
+                fi
+            fi
+        fi
+
+        # Timer progress bar (30 chars wide)
+        local filled=0 bar="" pct=0
+        if (( ACTIVE_SECS_NEEDED > 0 )); then
+            pct=$(( ACTIVE_SECONDS * 100 / ACTIVE_SECS_NEEDED ))
+            filled=$(( ACTIVE_SECONDS * 30 / ACTIVE_SECS_NEEDED ))
+        fi
+        (( filled > 30 )) && filled=30
+        local i
+        for (( i=0; i<filled; i++ ));    do bar+="█"; done
+        for (( i=filled; i<30; i++ )); do bar+="░"; done
+
+        local mins_done=$(( ACTIVE_SECONDS / 60 ))
+        local mins_left=$(( (ACTIVE_SECS_NEEDED - ACTIVE_SECONDS) / 60 ))
+
+        # Daemon uptime
+        local uptime_str="(unknown)"
+        local daemon_start
+        daemon_start=$(grep 'shrutz started' "$LOG_FILE" 2>/dev/null | tail -1 | \
+            grep -oE '^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' | tr -d '[]')
+        if [[ -n "$daemon_start" ]]; then
+            local start_epoch now_epoch elapsed
+            start_epoch=$(date -j -f '%Y-%m-%d %H:%M:%S' "$daemon_start" '+%s' 2>/dev/null || echo 0)
+            now_epoch=$(date '+%s')
+            elapsed=$(( now_epoch - start_epoch ))
+            uptime_str="$(( elapsed / 3600 ))h $(( (elapsed % 3600) / 60 ))m"
+        fi
+
+        # Status tags
+        local status_tags=""
+        (( PAUSED == 1 )) && status_tags=" [PAUSED]"
+        [[ "$shuffle_flag" == "true" ]] && status_tags+=" [SHUFFLE]"
+
+        # Last 5 history entries
+        local history_lines
+        history_lines=$(grep 'Switched →\|next →\|prev →' "$LOG_FILE" 2>/dev/null | tail -5)
+
+        # Total switches
+        local total_switches
+        total_switches=$(grep -c 'Switched →' "$LOG_FILE" 2>/dev/null || echo 0)
+
+        # Draw
+        printf '%s' "$clear_screen"
+        printf '\n'
+        printf '  ┌─────────────────────────────────────────────┐\n'
+        printf '  │  shrutz dash                  %s │\n' "$(date '+%H:%M:%S')              " | cut -c1-49
+        printf '  ├─────────────────────────────────────────────┤\n'
+        printf '  │  %-43s│\n' ""
+        printf '  │  Wallpaper : %-31s│\n' "$current_name"
+        printf '  │  Set       : %-31s│\n' "$ACTIVE_SET${status_tags}"
+        printf '  │  Position  : %-31s│\n' "$(( CURRENT_INDEX + 1 )) of $total"
+        printf '  │  %-43s│\n' ""
+        printf '  │  Timer     : [%s] %d%%%-14s│\n' "$bar" "$pct" ""
+        printf '  │  Active    : %dm done / %dm to next%-9s│\n' "$mins_done" "$mins_left" ""
+        printf '  │  Uptime    : %-31s│\n' "$uptime_str"
+        printf '  │  Switches  : %-31s│\n' "$total_switches total"
+        printf '  │  %-43s│\n' ""
+        printf '  ├─────────────────────────────────────────────┤\n'
+        printf '  │  Recent history                             │\n'
+        printf '  │  %-43s│\n' ""
+        if [[ -z "$history_lines" ]]; then
+            printf '  │  %-43s│\n' "(no switches yet)"
+        else
+            while IFS= read -r line; do
+                local ts img pos
+                ts=$(echo "$line" | grep -oE '\[[0-9]{2}:[0-9]{2}:[0-9]{2}\]' | tr -d '[]')
+                pos=$(echo "$line" | grep -oE '\[[0-9]+/[0-9]+\]' | tr -d '[]')
+                img=$(echo "$line" | grep -oE '[^ /]+\.(jpg|jpeg|png|heic|webp)')
+                local entry="$ts  $pos  $img"
+                printf '  │  %-43s│\n' "${entry:0:43}"
+            done <<< "$history_lines"
+        fi
+        printf '  │  %-43s│\n' ""
+        printf '  └─────────────────────────────────────────────┘\n'
+        printf '\n  Press q to exit\n'
+
+        # Non-blocking read for q
+        local key=""
+        IFS= read -r -s -n1 -t "$DASH_REFRESH" key 2>/dev/null || true
+        [[ "$key" == "q" || "$key" == "Q" ]] && break
+    done
+
+    printf '%s' "$show_cursor"
+    tput rmcup 2>/dev/null || true
+}
+
+# ── shrutz export ─────────────────────────────────────────────
+cmd_export() {
+    local name="${1:-}" dest="${2:-$HOME/Desktop}"
+    [[ -z "$name" ]] && die "Usage: shrutz export <set> [destination]"
+
+    local dir="$WALLPAPER_BASE/$name"
+    [[ -d "$dir" ]] || die "set '$name' does not exist"
+    [[ -d "$dest" ]] || die "destination '$dest' does not exist"
+
+    local outfile="$dest/${name}.zip"
+    echo "shrutz: exporting set '$name' to $outfile..."
+
+    # zip the set directory; -j junks the paths so zip contains flat files
+    # but we want to preserve the __init__ alongside images, so use -r with subdir
+    (cd "$WALLPAPER_BASE" && zip -r "$outfile" "$name/" -x "*.DS_Store") || \
+        die "zip failed — is zip installed?"
+
+    local size
+    size=$(du -sh "$outfile" | cut -f1)
+    echo "shrutz: exported $size → $outfile"
+}
+
+# ── shrutz update ─────────────────────────────────────────────
+cmd_update() {
+    load_state
+
+    [[ -z "$SHRUTZ_REPO" ]] && die "repo path unknown — reinstall shrutz to register SHRUTZ_REPO"
+    [[ -d "$SHRUTZ_REPO/.git" ]] || die "SHRUTZ_REPO '$SHRUTZ_REPO' is not a git repository"
+
+    echo "shrutz: pulling latest from $SHRUTZ_REPO..."
+    git -C "$SHRUTZ_REPO" pull || die "git pull failed"
+
+    echo "shrutz: running installer..."
+    bash "$SHRUTZ_REPO/install.sh"
+
+    # Installer restarts the daemon; preserve SHRUTZ_REPO in state
+    # (install.sh will re-seed it, but belt-and-suspenders)
+    echo "shrutz: update complete"
+}
+
 # ══════════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ══════════════════════════════════════════════════════════════════
@@ -773,42 +1041,49 @@ case "${1:-daemon}" in
     config)       shift; cmd_config "$@" ;;
     stats)        cmd_stats ;;
     history)      shift; cmd_history "$@" ;;
+    dash)         cmd_dash ;;
+    export)       shift; cmd_export "$@" ;;
+    update)       cmd_update ;;
     -h|--help|help)
         echo "Usage: shrutz <command> [args]"
         echo ""
         echo "  Daemon"
         echo "  ──────────────────────────────────────────────────"
-        echo "  status              show daemon status"
-        echo "  log                 stream the live activity log"
-        echo "  start               load and start the daemon"
-        echo "  stop                unload and stop the daemon"
+        echo "  status                    show daemon status"
+        echo "  log                       stream the live activity log"
+        echo "  start                     load and start the daemon"
+        echo "  stop                      unload and stop the daemon"
+        echo "  update                    pull latest version and reinstall"
         echo ""
         echo "  Playback"
         echo "  ──────────────────────────────────────────────────"
-        echo "  now                 current wallpaper + timer state"
-        echo "  next                skip to next wallpaper"
-        echo "  prev                go to previous wallpaper"
-        echo "  pause               freeze the active timer"
-        echo "  resume              unfreeze the active timer"
+        echo "  now                       current wallpaper + timer state"
+        echo "  next                      skip to next wallpaper"
+        echo "  prev                      go to previous wallpaper"
+        echo "  pause                     freeze the active timer"
+        echo "  resume                    unfreeze the active timer"
+        echo "  dash                      live terminal dashboard"
         echo ""
         echo "  Sets"
         echo "  ──────────────────────────────────────────────────"
-        echo "  sets                list all wallpaper sets"
-        echo "  set create <n>      create a new set (optional: <n> <src-path>)"
-        echo "  set delete <n>      delete a set (cannot delete active)"
-        echo "  set rename <o> <n>  rename a set"
-        echo "  set info <n>        show set details and progress"
-        echo "  switch <set>        switch active wallpaper set"
-        echo "  import <path>       import images into active set"
-        echo "    --set <name>      import into a specific set instead"
+        echo "  sets                      list all wallpaper sets"
+        echo "  set create <n> [src]      create a new set"
+        echo "  set delete <n>            delete a set (cannot delete active)"
+        echo "  set rename <old> <new>    rename a set"
+        echo "  set info <n>              show set details and progress"
+        echo "  set shuffle <n> <on|off>  enable/disable shuffle for a set"
+        echo "  switch <set>              switch active wallpaper set"
+        echo "  import <path>             import images into active set"
+        echo "    --set <name>            import into a specific set instead"
+        echo "  export <set> [dest]       zip a set for backup/sharing"
         echo ""
         echo "  Info"
         echo "  ──────────────────────────────────────────────────"
-        echo "  stats               daemon uptime, switch count, totals"
-        echo "  history [n]         last n wallpaper switches (default 10)"
-        echo "  config              show tunables"
-        echo "  config <key> <val>  set a tunable and restart daemon"
-        echo "                      keys: ACTIVE_MINS IDLE_THRESHOLD CHECK_EVERY"
+        echo "  stats                     daemon uptime, switch count, totals"
+        echo "  history [n]               last n wallpaper switches (default 10)"
+        echo "  config                    show tunables"
+        echo "  config <key> <val>        set a tunable and restart daemon"
+        echo "                            keys: ACTIVE_MINS IDLE_THRESHOLD CHECK_EVERY"
         echo ""
         ;;
     *)

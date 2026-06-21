@@ -152,6 +152,24 @@ launchctl unload "$LINK" 2>/dev/null || true
 launchctl load   "$LINK"
 echo "  ✓  Agent loaded and running"
 
+# ── Step 11: Install man page ──────────────────────────────────
+MAN_SRC="$(cd "$(dirname "$0")" && pwd)/shrutz.1"
+if [[ -f "$MAN_SRC" ]]; then
+    cp "$MAN_SRC" "$MAN/shrutz.1"
+    echo "  ✓  Man page installed → $MAN/shrutz.1"
+else
+    echo "  ↩  shrutz.1 not found next to install.sh — man page skipped"
+fi
+
+# ── Step 12: Record repo path in state ────────────────────────
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+if grep -q '^SHRUTZ_REPO=' "$LIB/state" 2>/dev/null; then
+    sed -i '' "s|^SHRUTZ_REPO=.*|SHRUTZ_REPO=$REPO_DIR|" "$LIB/state"
+else
+    printf 'SHRUTZ_REPO=%s\n' "$REPO_DIR" >> "$LIB/state"
+fi
+echo "  ✓  Repo path recorded ($REPO_DIR)"
+
 # ── Done ───────────────────────────────────────────────────────
 echo ""
 echo "  Layout"
