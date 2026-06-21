@@ -43,12 +43,13 @@ load_state() {
     CURRENT_INDEX=0
     ACTIVE_SECONDS=0
     ACTIVE_SET="default"
+    PAUSED=0
     [[ -f "$STATE_FILE" ]] && source "$STATE_FILE"
 }
 
 save_state() {
-    printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\nACTIVE_SET=%s\n' \
-        "$CURRENT_INDEX" "$ACTIVE_SECONDS" "$ACTIVE_SET" > "$STATE_FILE"
+    printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\nACTIVE_SET=%s\nPAUSED=%d\n' \
+        "$CURRENT_INDEX" "$ACTIVE_SECONDS" "$ACTIVE_SET" "$PAUSED" > "$STATE_FILE"
 }
 
 # Resolve the active wallpaper directory from state.
@@ -248,7 +249,41 @@ run_daemon() {
 
     (( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
 
+    # ── Signal handlers ────────────────────────────────────────
+    # SIGUSR1 → next wallpaper immediately (timer untouched)
+    trap '_sig_next' USR1
+    # SIGUSR2 → prev wallpaper immediately (timer untouched)
+    trap '_sig_prev' USR2
+    # SIGHUP  → toggle pause/resume
+    trap '_sig_pause_toggle' HUP
+
+    _sig_next() {
+        (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
+        apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
+        log "next → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}") (timer unchanged)"
+        save_state
+    }
+
+    _sig_prev() {
+        (( CURRENT_INDEX = (CURRENT_INDEX - 1 + TOTAL) % TOTAL ))
+        apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
+        log "prev → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}") (timer unchanged)"
+        save_state
+    }
+
+    _sig_pause_toggle() {
+        if (( PAUSED == 0 )); then
+            PAUSED=1
+            log "paused — active timer frozen at ${ACTIVE_SECONDS}s"
+        else
+            PAUSED=0
+            log "resumed — active timer continuing from ${ACTIVE_SECONDS}s"
+        fi
+        save_state
+    }
+
     log "shrutz started — set='$ACTIVE_SET' $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
+    [[ "$PAUSED" == "1" ]] && log "note: starting in paused state"
     apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
     log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
 
@@ -257,7 +292,7 @@ run_daemon() {
 
         idle=$(idle_seconds)
 
-        if (( idle < IDLE_THRESHOLD )); then
+        if (( idle < IDLE_THRESHOLD )) && (( PAUSED == 0 )); then
             (( ACTIVE_SECONDS += CHECK_EVERY ))
 
             if (( ACTIVE_SECONDS >= ACTIVE_SECS_NEEDED )); then
@@ -459,6 +494,191 @@ cmd_switch() {
     echo "shrutz: switched to set '$name' (timer continues from ${ACTIVE_SECONDS}s)"
 }
 
+# ── shrutz next ───────────────────────────────────────────────
+cmd_next() {
+    local pid
+    pid=$(daemon_pid)
+    [[ -z "$pid" ]] && die "daemon is not running"
+    kill -USR1 "$pid"
+    echo "shrutz: next wallpaper (timer unchanged)"
+}
+
+# ── shrutz prev ───────────────────────────────────────────────
+cmd_prev() {
+    local pid
+    pid=$(daemon_pid)
+    [[ -z "$pid" ]] && die "daemon is not running"
+    kill -USR2 "$pid"
+    echo "shrutz: previous wallpaper (timer unchanged)"
+}
+
+# ── shrutz pause / resume ─────────────────────────────────────
+cmd_pause() {
+    local pid
+    pid=$(daemon_pid)
+    [[ -z "$pid" ]] && die "daemon is not running"
+    load_state
+    (( PAUSED == 1 )) && { echo "shrutz: already paused — use 'shrutz resume'"; exit 0; }
+    kill -HUP "$pid"
+    echo "shrutz: paused"
+}
+
+cmd_resume() {
+    local pid
+    pid=$(daemon_pid)
+    [[ -z "$pid" ]] && die "daemon is not running"
+    load_state
+    (( PAUSED == 0 )) && { echo "shrutz: not paused — use 'shrutz pause'"; exit 0; }
+    kill -HUP "$pid"
+    echo "shrutz: resumed"
+}
+
+# ── shrutz now ────────────────────────────────────────────────
+cmd_now() {
+    load_state
+
+    local wallpaper_dir="$WALLPAPER_BASE/$ACTIVE_SET"
+    local total
+    total=$(count_images "$wallpaper_dir")
+
+    local current_name="(unknown)"
+    if (( total > 0 )); then
+        # Rebuild sorted list to resolve name from index
+        local files=()
+        while IFS= read -r -d '' f; do
+            files+=("$f")
+        done < <(find "$wallpaper_dir" -maxdepth 1 \
+            \( -iname "*.jpg" -o -iname "*.jpeg" \
+            -o -iname "*.png" -o -iname "*.heic" \
+            -o -iname "*.webp" \) \
+            -print0 | sort -z)
+        (( CURRENT_INDEX < ${#files[@]} )) && \
+            current_name=$(basename "${files[$CURRENT_INDEX]}")
+    fi
+
+    local mins_done mins_left
+    mins_done=$(( ACTIVE_SECONDS / 60 ))
+    mins_left=$(( (ACTIVE_SECS_NEEDED - ACTIVE_SECONDS) / 60 ))
+    local paused_label=""
+    (( PAUSED == 1 )) && paused_label=" [PAUSED]"
+
+    echo ""
+    echo "  Wallpaper : $current_name"
+    echo "  Set       : $ACTIVE_SET"
+    echo "  Position  : $(( CURRENT_INDEX + 1 )) of $total"
+    echo "  Timer     : ${mins_done}m active / ${ACTIVE_MINS}m needed (${mins_left}m to next)${paused_label}"
+    echo ""
+}
+
+# ── shrutz config ─────────────────────────────────────────────
+cmd_config() {
+    local script="$HOME/.local/bin/shrutz"
+    local key="${1:-}" val="${2:-}"
+
+    if [[ -z "$key" ]]; then
+        # Pretty-print current tunables
+        echo ""
+        echo "  Tunables (edit with: shrutz config <key> <value>)"
+        echo ""
+        grep -E '^(ACTIVE_MINS|IDLE_THRESHOLD|CHECK_EVERY)=' "$script" | \
+        while IFS='=' read -r k v; do
+            # Strip inline comment
+            v="${v%%#*}"
+            v="${v%"${v##*[![:space:]]}"}"  # rtrim
+            case "$k" in
+                ACTIVE_MINS)     printf '  %-20s = %s  (minutes active before switching)\n' "$k" "$v" ;;
+                IDLE_THRESHOLD)  printf '  %-20s = %s  (seconds idle before pausing timer)\n' "$k" "$v" ;;
+                CHECK_EVERY)     printf '  %-20s = %s  (poll interval in seconds)\n' "$k" "$v" ;;
+            esac
+        done
+        echo ""
+        return
+    fi
+
+    # Validate key
+    case "$key" in
+        ACTIVE_MINS|IDLE_THRESHOLD|CHECK_EVERY) ;;
+        *) die "unknown config key '$key' — valid keys: ACTIVE_MINS, IDLE_THRESHOLD, CHECK_EVERY" ;;
+    esac
+
+    [[ -z "$val" ]] && die "Usage: shrutz config <key> <value>"
+    [[ "$val" =~ ^[0-9]+$ ]] || die "value must be a positive integer"
+
+    # In-place sed edit on the script
+    sed -i '' "s/^${key}=[0-9]*/${key}=${val}/" "$script"
+    echo "shrutz: $key set to $val"
+
+    # Restart daemon so it picks up new tunables
+    restart_daemon
+    echo "shrutz: daemon restarted"
+}
+
+# ── shrutz stats ──────────────────────────────────────────────
+cmd_stats() {
+    load_state
+
+    local total_switches uptime_line daemon_start uptime_str
+    total_switches=$(grep -c 'Switched →' "$LOG_FILE" 2>/dev/null || echo 0)
+
+    # First log line gives us daemon birth timestamp
+    daemon_start=$(grep 'shrutz started' "$LOG_FILE" 2>/dev/null | tail -1 | \
+        grep -oE '^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' | \
+        tr -d '[]')
+
+    if [[ -n "$daemon_start" ]]; then
+        local start_epoch now_epoch elapsed_secs
+        start_epoch=$(date -j -f '%Y-%m-%d %H:%M:%S' "$daemon_start" '+%s' 2>/dev/null || echo 0)
+        now_epoch=$(date '+%s')
+        elapsed_secs=$(( now_epoch - start_epoch ))
+        local h=$(( elapsed_secs / 3600 ))
+        local m=$(( (elapsed_secs % 3600) / 60 ))
+        uptime_str="${h}h ${m}m"
+    else
+        uptime_str="(unknown)"
+    fi
+
+    local total_images=0
+    local set_count=0
+    for dir in "$WALLPAPER_BASE"/*/; do
+        [[ -d "$dir" ]] || continue
+        (( set_count++ )) || true
+        (( total_images += $(count_images "$dir") )) || true
+    done
+
+    local paused_label=""
+    (( PAUSED == 1 )) && paused_label=" (paused)"
+
+    echo ""
+    echo "  Daemon uptime    : $uptime_str"
+    echo "  Total switches   : $total_switches"
+    echo "  Active sets      : $set_count"
+    echo "  Total images     : $total_images"
+    echo "  Active set       : $ACTIVE_SET${paused_label}"
+    echo "  Timer            : $(( ACTIVE_SECONDS / 60 ))m / ${ACTIVE_MINS}m"
+    echo ""
+}
+
+# ── shrutz history ────────────────────────────────────────────
+cmd_history() {
+    local n="${1:-10}"
+    [[ "$n" =~ ^[0-9]+$ ]] || die "Usage: shrutz history [count]"
+
+    echo ""
+    printf '  %-22s  %-6s  %s\n' "TIMESTAMP" "POS" "WALLPAPER"
+    printf '  %-22s  %-6s  %s\n' "──────────────────────" "──────" "─────────────────────"
+
+    grep 'Switched →\|next →\|prev →' "$LOG_FILE" 2>/dev/null | tail -n "$n" | \
+    while IFS= read -r line; do
+        local ts img pos
+        ts=$(echo "$line" | grep -oE '^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' | tr -d '[]')
+        pos=$(echo "$line" | grep -oE '\[[0-9]+/[0-9]+\]' | tr -d '[]')
+        img=$(echo "$line" | grep -oE '\] [^ ]+\.(jpg|jpeg|png|heic|webp)' | sed 's/^\] //')
+        printf '  %-22s  %-6s  %s\n' "$ts" "$pos" "$img"
+    done
+
+    echo ""
+}
+
 # ── shrutz import ──────────────────────────────────────────────
 cmd_import() {
     local src="" target_set=""
@@ -545,14 +765,34 @@ case "${1:-daemon}" in
     set)          shift; cmd_set "$@" ;;
     switch)       shift; cmd_switch "$@" ;;
     import)       shift; cmd_import "$@" ;;
+    next)         cmd_next ;;
+    prev)         cmd_prev ;;
+    pause)        cmd_pause ;;
+    resume)       cmd_resume ;;
+    now)          cmd_now ;;
+    config)       shift; cmd_config "$@" ;;
+    stats)        cmd_stats ;;
+    history)      shift; cmd_history "$@" ;;
     -h|--help|help)
         echo "Usage: shrutz <command> [args]"
         echo ""
-        echo "  daemon              run the wallpaper daemon (called by launchd)"
+        echo "  Daemon"
+        echo "  ──────────────────────────────────────────────────"
         echo "  status              show daemon status"
         echo "  log                 stream the live activity log"
         echo "  start               load and start the daemon"
         echo "  stop                unload and stop the daemon"
+        echo ""
+        echo "  Playback"
+        echo "  ──────────────────────────────────────────────────"
+        echo "  now                 current wallpaper + timer state"
+        echo "  next                skip to next wallpaper"
+        echo "  prev                go to previous wallpaper"
+        echo "  pause               freeze the active timer"
+        echo "  resume              unfreeze the active timer"
+        echo ""
+        echo "  Sets"
+        echo "  ──────────────────────────────────────────────────"
         echo "  sets                list all wallpaper sets"
         echo "  set create <n>      create a new set (optional: <n> <src-path>)"
         echo "  set delete <n>      delete a set (cannot delete active)"
@@ -561,6 +801,14 @@ case "${1:-daemon}" in
         echo "  switch <set>        switch active wallpaper set"
         echo "  import <path>       import images into active set"
         echo "    --set <name>      import into a specific set instead"
+        echo ""
+        echo "  Info"
+        echo "  ──────────────────────────────────────────────────"
+        echo "  stats               daemon uptime, switch count, totals"
+        echo "  history [n]         last n wallpaper switches (default 10)"
+        echo "  config              show tunables"
+        echo "  config <key> <val>  set a tunable and restart daemon"
+        echo "                      keys: ACTIVE_MINS IDLE_THRESHOLD CHECK_EVERY"
         echo ""
         ;;
     *)
