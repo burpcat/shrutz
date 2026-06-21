@@ -3,7 +3,7 @@
 # │  shrutz — active-time wallpaper rotator                     │
 # │                                                             │
 # │  Script  : ~/.local/bin/shrutz                             │
-# │  Walls   : ~/.local/lib/shrutz/wallpapers/                 │
+# │  Sets    : ~/.local/lib/shrutz/wallpapers/<set>/           │
 # │  State   : ~/.local/lib/shrutz/state                       │
 # │  Log     : ~/.local/lib/shrutz/shrutz.log                  │
 # │  Agent   : ~/.local/etc/launchd/local.shrutz.plist         │
@@ -12,7 +12,7 @@
 
 # ── Paths ──────────────────────────────────────────────────────
 SHRUTZ_LIB="$HOME/.local/lib/shrutz"
-WALLPAPER_DIR="$SHRUTZ_LIB/wallpapers"
+WALLPAPER_BASE="$SHRUTZ_LIB/wallpapers"
 STATE_FILE="$SHRUTZ_LIB/state"
 LOG_FILE="$SHRUTZ_LIB/shrutz.log"
 WALLPAPER_STORE="$HOME/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
@@ -25,52 +25,115 @@ CHECK_EVERY=30        # how often the loop wakes up (seconds)
 # ── Derived ────────────────────────────────────────────────────
 ACTIVE_SECS_NEEDED=$(( ACTIVE_MINS * 60 ))
 
-# ── Logging ────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# SHARED UTILITIES
+# ══════════════════════════════════════════════════════════════════
+
 log() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE"
 }
 
-# ── Build wallpaper list ────────────────────────────────────────
-WALLPAPERS=()
-while IFS= read -r -d '' f; do
-    WALLPAPERS+=("$f")
-done < <(find "$WALLPAPER_DIR" -maxdepth 1 \
-    \( -iname "*.jpg"  -o -iname "*.jpeg" \
-    -o -iname "*.png"  -o -iname "*.heic" \
-    -o -iname "*.webp" \) \
-    -print0 | sort -z)
-
-TOTAL=${#WALLPAPERS[@]}
-if (( TOTAL == 0 )); then
-    log "ERROR: no images found in $WALLPAPER_DIR — exiting"
+die() {
+    printf 'shrutz: %s\n' "$*" >&2
     exit 1
-fi
+}
 
-# ── Load state ─────────────────────────────────────────────────
-CURRENT_INDEX=0
-ACTIVE_SECONDS=0
-if [[ -f "$STATE_FILE" ]]; then
-    # shellcheck source=/dev/null
-    source "$STATE_FILE"
-fi
-(( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
+# Load state into globals. Safe to call multiple times.
+load_state() {
+    CURRENT_INDEX=0
+    ACTIVE_SECONDS=0
+    ACTIVE_SET="default"
+    [[ -f "$STATE_FILE" ]] && source "$STATE_FILE"
+}
 
-# ── Helpers ────────────────────────────────────────────────────
+save_state() {
+    printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\nACTIVE_SET=%s\n' \
+        "$CURRENT_INDEX" "$ACTIVE_SECONDS" "$ACTIVE_SET" > "$STATE_FILE"
+}
+
+# Resolve the active wallpaper directory from state.
+active_set_dir() {
+    echo "$WALLPAPER_BASE/$ACTIVE_SET"
+}
+
+# Read the __init__ field by key from a set directory.
+# Usage: init_field <set_dir> <key>
+init_field() {
+    local dir="$1" key="$2"
+    local init="$dir/__init__"
+    [[ -f "$init" ]] && grep "^${key}=" "$init" | cut -d= -f2- || echo ""
+}
+
+# Count images in a set directory (excludes __init__).
+count_images() {
+    local dir="$1"
+    find "$dir" -maxdepth 1 \
+        \( -iname "*.jpg" -o -iname "*.jpeg" \
+        -o -iname "*.png" -o -iname "*.heic" \
+        -o -iname "*.webp" \) 2>/dev/null | wc -l | tr -d ' '
+}
+
+# Check a set directory exists and is non-empty.
+assert_set_exists() {
+    local name="$1"
+    local dir="$WALLPAPER_BASE/$name"
+    [[ -d "$dir" ]]     || die "set '$name' does not exist"
+    (( $(count_images "$dir") > 0 )) || die "set '$name' has no images"
+}
+
+# Write (or overwrite) the __init__ metadata file for a set.
+write_init() {
+    local dir="$1" name="$2"
+    local count
+    count=$(count_images "$dir")
+    cat > "$dir/__init__" << EOF
+name=$name
+created=$(date '+%Y-%m-%d %H:%M:%S')
+images=$count
+EOF
+}
+
+# Refresh the image count in an existing __init__ without touching other fields.
+refresh_init_count() {
+    local dir="$1"
+    local count
+    count=$(count_images "$dir")
+    local init="$dir/__init__"
+    if [[ -f "$init" ]]; then
+        local tmp
+        tmp=$(grep -v '^images=' "$init")
+        printf '%s\nimages=%s\n' "$tmp" "$count" > "$init"
+    fi
+}
+
+# Get the PID of the running daemon (launchd-managed shrutz process).
+daemon_pid() {
+    pgrep -f "shrutz daemon" 2>/dev/null | head -1
+}
+
+# Signal the daemon to restart via launchd (SIGTERM → launchd restarts it).
+restart_daemon() {
+    local pid
+    pid=$(daemon_pid)
+    [[ -n "$pid" ]] && kill "$pid" 2>/dev/null
+    # launchd KeepAlive=true restarts it automatically within ~1s
+}
+
+# ══════════════════════════════════════════════════════════════════
+# DAEMON INTERNALS
+# ══════════════════════════════════════════════════════════════════
 
 idle_seconds() {
     ioreg -c IOHIDSystem \
         | awk '/HIDIdleTime/ { print int($NF / 1000000000); exit }'
 }
 
-# Read what is actually showing on the active Space right now.
 current_wallpaper() {
     osascript -e \
         'tell application "System Events" to get picture of desktop 1' \
         2>/dev/null | tr -d '\n'
 }
 
-# Fast apply to the currently visible Space on every display.
-# Used for mismatch corrections — no agent restart needed.
 apply_to_current_space() {
     local path="$1"
     osascript -e \
@@ -81,32 +144,6 @@ apply_to_current_space() {
         end tell" 2>/dev/null
 }
 
-# Write the new wallpaper path into every Space entry inside
-# Index.plist, then restart the wallpaper agent so it re-reads
-# the store and propagates the change to all Mission Control Spaces.
-#
-# How Index.plist works (macOS 14+):
-#   The file lives at:
-#     ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist
-#   It is a binary plist with four top-level keys:
-#     AllSpacesAndDisplays  — idle/screensaver config (we leave this alone)
-#     SystemDefault         — fallback config for unassigned spaces
-#     Spaces                — dict keyed by Space UUID; each Space has:
-#                               Default    → the Space-level wallpaper
-#                               Displays   → per-display overrides within the Space
-#     Displays              — top-level display configs
-#
-#   The image path is NOT in the `Files` array (always empty).
-#   It is inside the `Configuration` field, which is itself a binary
-#   plist with shape:
-#     { 'type': 'imageFile', 'url': { 'relative': 'file:///path/to/img' } }
-#
-#   We rebuild that inner plist with the new path and write it back.
-#   The wallpaper agent is restarted via launchctl so it picks up the
-#   changes across all Spaces without requiring a full logout.
-#
-# Path is passed via WP_PATH env var to keep bash quoting simple and
-# handle filenames with spaces or special characters safely.
 write_index_plist() {
     local path="$1"
     local store="$WALLPAPER_STORE"
@@ -117,7 +154,6 @@ import plistlib, datetime, os, sys
 path  = os.environ['WP_PATH']
 store = os.environ['WP_STORE']
 
-# Build the inner Configuration binary plist for this image path
 config = plistlib.dumps(
     {'type': 'imageFile', 'url': {'relative': f'file://{path}'}},
     fmt=plistlib.FMT_BINARY
@@ -125,17 +161,14 @@ config = plistlib.dumps(
 now = datetime.datetime.now()
 
 def patch_desktop(desktop):
-    """Rewrite the Configuration blob and touch LastSet on a Desktop entry."""
     content = desktop.get('Content', {})
     for choice in content.get('Choices', []):
-        # Only touch image choices — leave idle/video/dynamic entries alone
         if choice.get('Provider') == 'com.apple.wallpaper.choice.image':
             choice['Configuration'] = config
             choice['Files'] = []
     desktop['LastSet'] = now
 
 def patch_space(space):
-    """Update Default and every Display override within a Space."""
     default = space.get('Default', {})
     if 'Desktop' in default:
         patch_desktop(default['Desktop'])
@@ -147,15 +180,12 @@ try:
     with open(store, 'rb') as f:
         d = plistlib.load(f)
 
-    # SystemDefault — fallback for any Space not explicitly listed
     if 'Desktop' in d.get('SystemDefault', {}):
         patch_desktop(d['SystemDefault']['Desktop'])
 
-    # Every named Space
     for space in d.get('Spaces', {}).values():
         patch_space(space)
 
-    # Top-level Displays (cover display-level overrides outside a Space)
     for disp in d.get('Displays', {}).values():
         if 'Desktop' in disp:
             patch_desktop(disp['Desktop'])
@@ -174,20 +204,15 @@ apply_all_spaces() {
     local path="$1"
 
     if [[ ! -f "$WALLPAPER_STORE" ]]; then
-        # Store absent — old macOS or unusual setup; fall back to AppleScript
         apply_to_current_space "$path"
         log "Wallpaper store not found — applied to current space only (poll will correct others)"
         return
     fi
 
     if write_index_plist "$path"; then
-        # Restart the wallpaper agent so it re-reads Index.plist.
-        # launchctl kickstart -k kills the running instance and starts a fresh one.
-        # The gui/<uid>/ prefix targets the per-user launchd domain (not system-wide).
         launchctl kickstart -k "gui/$(id -u)/com.apple.wallpaper.agent" 2>/dev/null || \
             killall WallpaperAgent 2>/dev/null || true
         sleep 1
-        # Belt-and-suspenders: also set via AppleScript for the active Space
         apply_to_current_space "$path"
         log "Applied to all spaces via Index.plist + agent reload"
     else
@@ -196,49 +221,349 @@ apply_all_spaces() {
     fi
 }
 
-save_state() {
-    printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\n' \
-        "$CURRENT_INDEX" "$ACTIVE_SECONDS" > "$STATE_FILE"
-}
+# ══════════════════════════════════════════════════════════════════
+# DAEMON — main loop
+# ══════════════════════════════════════════════════════════════════
 
-# ── Boot ───────────────────────────────────────────────────────
-log "shrutz started — $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
-apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
-log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+run_daemon() {
+    load_state
 
-# ── Main loop ──────────────────────────────────────────────────
-while true; do
-    sleep "$CHECK_EVERY"
+    WALLPAPER_DIR="$WALLPAPER_BASE/$ACTIVE_SET"
 
-    idle=$(idle_seconds)
+    # Build wallpaper list
+    WALLPAPERS=()
+    while IFS= read -r -d '' f; do
+        WALLPAPERS+=("$f")
+    done < <(find "$WALLPAPER_DIR" -maxdepth 1 \
+        \( -iname "*.jpg"  -o -iname "*.jpeg" \
+        -o -iname "*.png"  -o -iname "*.heic" \
+        -o -iname "*.webp" \) \
+        -print0 | sort -z)
 
-    if (( idle < IDLE_THRESHOLD )); then
-        # ── User is active ──────────────────────────────────────
-        (( ACTIVE_SECONDS += CHECK_EVERY ))
+    TOTAL=${#WALLPAPERS[@]}
+    if (( TOTAL == 0 )); then
+        log "ERROR: no images found in $WALLPAPER_DIR — exiting"
+        exit 1
+    fi
 
-        if (( ACTIVE_SECONDS >= ACTIVE_SECS_NEEDED )); then
-            # ── Time to advance ─────────────────────────────────
-            # Full apply: write Index.plist so every Space gets updated.
-            (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
-            apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
-            ACTIVE_SECONDS=0
-            log "Switched → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+    (( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
 
-        else
-            # ── Not yet time — poll the active Space ────────────
-            # Catches a Space that missed a previous Index.plist write,
-            # or where the agent reload hadn't propagated yet.
-            # Fast AppleScript only — no plist write, no agent restart.
-            expected="${WALLPAPERS[$CURRENT_INDEX]}"
-            current=$(current_wallpaper)
-            if [[ "$current" != "$expected" ]]; then
-                apply_to_current_space "$expected"
-                log "Mismatch on active space — reapplied: $(basename "$expected")"
+    log "shrutz started — set='$ACTIVE_SET' $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
+    apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
+    log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+
+    while true; do
+        sleep "$CHECK_EVERY"
+
+        idle=$(idle_seconds)
+
+        if (( idle < IDLE_THRESHOLD )); then
+            (( ACTIVE_SECONDS += CHECK_EVERY ))
+
+            if (( ACTIVE_SECONDS >= ACTIVE_SECS_NEEDED )); then
+                (( CURRENT_INDEX = (CURRENT_INDEX + 1) % TOTAL ))
+                apply_all_spaces "${WALLPAPERS[$CURRENT_INDEX]}"
+                ACTIVE_SECONDS=0
+                log "Switched → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "${WALLPAPERS[$CURRENT_INDEX]}")"
+
+            else
+                expected="${WALLPAPERS[$CURRENT_INDEX]}"
+                current=$(current_wallpaper)
+                if [[ "$current" != "$expected" ]]; then
+                    apply_to_current_space "$expected"
+                    log "Mismatch on active space — reapplied: $(basename "$expected")"
+                fi
             fi
         fi
 
-    fi
-    # idle >= IDLE_THRESHOLD: user is away, timer and poll both pause
+        save_state
+    done
+}
 
+# ══════════════════════════════════════════════════════════════════
+# CLI COMMANDS
+# ══════════════════════════════════════════════════════════════════
+
+cmd_status() {
+    launchctl list | grep shrutz || echo "shrutz: daemon not running"
+}
+
+cmd_log() {
+    tail -f "$LOG_FILE"
+}
+
+cmd_start() {
+    launchctl load "$HOME/Library/LaunchAgents/local.shrutz.plist"
+}
+
+cmd_stop() {
+    launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist"
+}
+
+# ── shrutz sets ────────────────────────────────────────────────
+cmd_sets() {
+    load_state
+    local found=0
+    printf '\n  %-24s  %-8s  %-20s  %s\n' "NAME" "IMAGES" "CREATED" ""
+    printf '  %-24s  %-8s  %-20s\n' "────────────────────────" "────────" "────────────────────"
+    for dir in "$WALLPAPER_BASE"/*/; do
+        [[ -d "$dir" ]] || continue
+        local name
+        name=$(basename "$dir")
+        local images created marker
+        images=$(count_images "$dir")
+        created=$(init_field "$dir" "created")
+        [[ "$name" == "$ACTIVE_SET" ]] && marker=" ◀ active" || marker=""
+        printf '  %-24s  %-8s  %-20s  %s\n' "$name" "$images" "$created" "$marker"
+        found=1
+    done
+    (( found == 0 )) && echo "  (no sets found — create one with: shrutz set create <name>)"
+    echo ""
+}
+
+# ── shrutz set <subcommand> ────────────────────────────────────
+cmd_set() {
+    local subcmd="${1:-}"
+    shift || true
+
+    case "$subcmd" in
+        create)  cmd_set_create "$@" ;;
+        delete)  cmd_set_delete "$@" ;;
+        rename)  cmd_set_rename "$@" ;;
+        info)    cmd_set_info   "$@" ;;
+        *)
+            echo "Usage: shrutz set <create|delete|rename|info> [args]"
+            exit 1
+            ;;
+    esac
+}
+
+cmd_set_create() {
+    local name="${1:-}"
+    local src="${2:-}"
+    [[ -z "$name" ]] && die "Usage: shrutz set create <name> [source-path]"
+
+    local dir="$WALLPAPER_BASE/$name"
+    [[ -d "$dir" ]] && die "set '$name' already exists"
+
+    mkdir -p "$dir"
+    write_init "$dir" "$name"
+    echo "shrutz: created set '$name'"
+
+    if [[ -n "$src" ]]; then
+        echo "shrutz: importing from '$src'..."
+        _import_into "$src" "$dir"
+        refresh_init_count "$dir"
+        echo "shrutz: done — $(count_images "$dir") images in '$name'"
+    fi
+}
+
+cmd_set_delete() {
+    local name="${1:-}"
+    [[ -z "$name" ]] && die "Usage: shrutz set delete <name>"
+
+    load_state
+    [[ "$name" == "$ACTIVE_SET" ]] && die "cannot delete the active set ('$name' is in use — switch first)"
+
+    local dir="$WALLPAPER_BASE/$name"
+    [[ -d "$dir" ]] || die "set '$name' does not exist"
+
+    printf 'shrutz: delete set "%s" and all its images? [y/N] ' "$name"
+    read -r answer
+    [[ "$answer" =~ ^[Yy]$ ]] || { echo "shrutz: cancelled"; exit 0; }
+
+    rm -rf "$dir"
+    echo "shrutz: deleted set '$name'"
+}
+
+cmd_set_rename() {
+    local old="${1:-}" new="${2:-}"
+    [[ -z "$old" || -z "$new" ]] && die "Usage: shrutz set rename <old> <new>"
+
+    local old_dir="$WALLPAPER_BASE/$old"
+    local new_dir="$WALLPAPER_BASE/$new"
+    [[ -d "$old_dir" ]] || die "set '$old' does not exist"
+    [[ -d "$new_dir" ]] && die "set '$new' already exists"
+
+    mv "$old_dir" "$new_dir"
+
+    # Patch name field in __init__
+    local init="$new_dir/__init__"
+    if [[ -f "$init" ]]; then
+        local tmp
+        tmp=$(grep -v '^name=' "$init")
+        printf '%s\nname=%s\n' "$tmp" "$new" > "$init"
+    fi
+
+    load_state
+    if [[ "$ACTIVE_SET" == "$old" ]]; then
+        ACTIVE_SET="$new"
+        save_state
+        echo "shrutz: renamed '$old' → '$new' (active set updated)"
+        restart_daemon
+    else
+        echo "shrutz: renamed '$old' → '$new'"
+    fi
+}
+
+cmd_set_info() {
+    local name="${1:-}"
+    [[ -z "$name" ]] && die "Usage: shrutz set info <name>"
+
+    local dir="$WALLPAPER_BASE/$name"
+    [[ -d "$dir" ]] || die "set '$name' does not exist"
+
+    load_state
+
+    local images created disksize active_marker
+    images=$(count_images "$dir")
+    created=$(init_field "$dir" "created")
+    disksize=$(du -sh "$dir" 2>/dev/null | cut -f1)
+    [[ "$name" == "$ACTIVE_SET" ]] && active_marker=" (active)" || active_marker=""
+
+    echo ""
+    echo "  Set: $name$active_marker"
+    echo "  Created:    $created"
+    echo "  Images:     $images"
+    echo "  Disk usage: $disksize"
+
+    if [[ "$name" == "$ACTIVE_SET" ]]; then
+        local mins_done mins_left
+        mins_done=$(( ACTIVE_SECONDS / 60 ))
+        mins_left=$(( (ACTIVE_SECS_NEEDED - ACTIVE_SECONDS) / 60 ))
+        echo "  Progress:   ${mins_done}m active / ${ACTIVE_MINS}m needed (${mins_left}m remaining)"
+        echo "  Position:   image $(( CURRENT_INDEX + 1 )) of $images"
+    fi
+    echo ""
+}
+
+# ── shrutz switch ──────────────────────────────────────────────
+cmd_switch() {
+    local name="${1:-}"
+    [[ -z "$name" ]] && die "Usage: shrutz switch <set>"
+
+    assert_set_exists "$name"
+    load_state
+
+    if [[ "$ACTIVE_SET" == "$name" ]]; then
+        echo "shrutz: '$name' is already the active set"
+        exit 0
+    fi
+
+    # Preserve ACTIVE_SECONDS — the timer is never touched by switch
+    ACTIVE_SET="$name"
+    CURRENT_INDEX=0
     save_state
-done
+
+    restart_daemon
+    echo "shrutz: switched to set '$name' (timer continues from ${ACTIVE_SECONDS}s)"
+}
+
+# ── shrutz import ──────────────────────────────────────────────
+cmd_import() {
+    local src="" target_set=""
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --set)
+                shift
+                target_set="${1:-}"
+                [[ -z "$target_set" ]] && die "--set requires a set name"
+                ;;
+            *)
+                src="$1"
+                ;;
+        esac
+        shift
+    done
+
+    [[ -z "$src" ]] && die "Usage: shrutz import <path> [--set <name>]"
+
+    load_state
+    [[ -z "$target_set" ]] && target_set="$ACTIVE_SET"
+
+    local dir="$WALLPAPER_BASE/$target_set"
+    [[ -d "$dir" ]] || die "set '$target_set' does not exist"
+
+    echo "shrutz: importing into set '$target_set'..."
+    _import_into "$src" "$dir"
+    refresh_init_count "$dir"
+    echo "shrutz: done — $(count_images "$dir") total images in '$target_set'"
+}
+
+# Internal: copy supported images from src (file or dir) into dest dir.
+_import_into() {
+    local src="$1" dest="$2"
+    local added=0 skipped=0
+
+    if [[ -f "$src" ]]; then
+        _import_file "$src" "$dest" added skipped
+    elif [[ -d "$src" ]]; then
+        while IFS= read -r -d '' f; do
+            _import_file "$f" "$dest" added skipped
+        done < <(find "$src" -maxdepth 1 \
+            \( -iname "*.jpg"  -o -iname "*.jpeg" \
+            -o -iname "*.png"  -o -iname "*.heic" \
+            -o -iname "*.webp" \) \
+            -print0)
+    else
+        die "source '$src' is not a file or directory"
+    fi
+
+    echo "shrutz: $added added, $skipped skipped (duplicate filename)"
+}
+
+_import_file() {
+    local src="$1" dest="$2"
+    local -n _added=$3 _skipped=$4
+    local fname
+    fname=$(basename "$src")
+
+    if [[ -f "$dest/$fname" ]]; then
+        (( _skipped++ )) || true
+    else
+        cp "$src" "$dest/$fname"
+        (( _added++ )) || true
+    fi
+}
+
+# ══════════════════════════════════════════════════════════════════
+# ENTRY POINT
+# ══════════════════════════════════════════════════════════════════
+
+# When launchd starts shrutz it passes no arguments — run the daemon.
+# When called by the user, dispatch to the right command.
+
+case "${1:-daemon}" in
+    daemon)       run_daemon ;;
+    status)       cmd_status ;;
+    log)          cmd_log ;;
+    start)        cmd_start ;;
+    stop)         cmd_stop ;;
+    sets)         cmd_sets ;;
+    set)          shift; cmd_set "$@" ;;
+    switch)       shift; cmd_switch "$@" ;;
+    import)       shift; cmd_import "$@" ;;
+    -h|--help|help)
+        echo "Usage: shrutz <command> [args]"
+        echo ""
+        echo "  daemon              run the wallpaper daemon (called by launchd)"
+        echo "  status              show daemon status"
+        echo "  log                 stream the live activity log"
+        echo "  start               load and start the daemon"
+        echo "  stop                unload and stop the daemon"
+        echo "  sets                list all wallpaper sets"
+        echo "  set create <n>      create a new set (optional: <n> <src-path>)"
+        echo "  set delete <n>      delete a set (cannot delete active)"
+        echo "  set rename <o> <n>  rename a set"
+        echo "  set info <n>        show set details and progress"
+        echo "  switch <set>        switch active wallpaper set"
+        echo "  import <path>       import images into active set"
+        echo "    --set <name>      import into a specific set instead"
+        echo ""
+        ;;
+    *)
+        die "unknown command '$1' — run 'shrutz help' for usage"
+        ;;
+esac

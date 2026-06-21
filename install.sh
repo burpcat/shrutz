@@ -11,18 +11,21 @@
 
 set -euo pipefail
 
-# ── Layout (mirrors XDG conventions, macOS-compatible) ─────────
-BIN="$HOME/.local/bin"                  # executables on PATH
-LIB="$HOME/.local/lib/shrutz"          # runtime data for shrutz
-ETC="$HOME/.local/etc/launchd"         # source-of-truth for your plists
-WALLS="$LIB/wallpapers"                # drop your images here
+# ── Layout ─────────────────────────────────────────────────────
+BIN="$HOME/.local/bin"
+LIB="$HOME/.local/lib/shrutz"
+ETC="$HOME/.local/etc/launchd"
+MAN="$HOME/.local/share/man/man1"
 
-LAUNCH_AGENTS="$HOME/Library/LaunchAgents"   # where macOS reads agents from
+WALLS_BASE="$LIB/wallpapers"
+WALLS_DEFAULT="$WALLS_BASE/default"
+
+LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 LABEL="local.shrutz"
 PLIST="$ETC/$LABEL.plist"
 LINK="$LAUNCH_AGENTS/$LABEL.plist"
 
-SRC="$(cd "$(dirname "$0")" && pwd)/shrutz"  # shrutz must sit next to install.sh
+SRC="$(cd "$(dirname "$0")" && pwd)/shrutz"
 
 # ── Step 1: Check source script ────────────────────────────────
 echo ""
@@ -36,61 +39,73 @@ if [[ ! -f "$SRC" ]]; then
 fi
 
 # ── Step 2: Build directory tree ───────────────────────────────
-mkdir -p "$BIN" "$LIB" "$WALLS" "$ETC" "$LAUNCH_AGENTS"
+mkdir -p "$BIN" "$LIB" "$WALLS_DEFAULT" "$ETC" "$LAUNCH_AGENTS" "$MAN"
 echo "  ✓  ~/.local tree ready"
 
-# ── Step 3: Install script ─────────────────────────────────────
+# ── Step 3: Write default set __init__ if absent ───────────────
+if [[ ! -f "$WALLS_DEFAULT/__init__" ]]; then
+    cat > "$WALLS_DEFAULT/__init__" << INIT_EOF
+name=default
+created=$(date '+%Y-%m-%d %H:%M:%S')
+images=0
+INIT_EOF
+    echo "  ✓  default wallpaper set initialised"
+else
+    echo "  ↩  default set already exists — skipped"
+fi
+
+# ── Step 4: Install script ─────────────────────────────────────
 cp "$SRC" "$BIN/shrutz"
 chmod +x "$BIN/shrutz"
 echo "  ✓  $BIN/shrutz"
 
-# ── Step 4: Add ~/.local/bin to PATH (non-destructive) ─────────
+# ── Step 5: Add ~/.local/bin and MANPATH to shell RC ───────────
 SHELL_RC=""
 if [[ "$SHELL" == */zsh ]];  then SHELL_RC="$HOME/.zshrc"; fi
 if [[ "$SHELL" == */bash ]]; then SHELL_RC="$HOME/.bashrc"; fi
 
-if [[ -n "$SHELL_RC" ]] && ! grep -q '\.local/bin' "$SHELL_RC" 2>/dev/null; then
-    printf '\n# Added by shrutz installer\nexport PATH="$HOME/.local/bin:$PATH"\n' \
-        >> "$SHELL_RC"
-    echo "  ✓  PATH updated in $SHELL_RC"
+if [[ -n "$SHELL_RC" ]]; then
+    if ! grep -q '\.local/bin' "$SHELL_RC" 2>/dev/null; then
+        printf '\n# Added by shrutz installer\nexport PATH="$HOME/.local/bin:$PATH"\n' \
+            >> "$SHELL_RC"
+        echo "  ✓  PATH updated in $SHELL_RC"
+    else
+        echo "  ↩  PATH already set — skipped"
+    fi
+
+    if ! grep -q 'local/share/man' "$SHELL_RC" 2>/dev/null; then
+        printf 'export MANPATH="$HOME/.local/share/man:$MANPATH"\n' \
+            >> "$SHELL_RC"
+        echo "  ✓  MANPATH updated in $SHELL_RC"
+    else
+        echo "  ↩  MANPATH already set — skipped"
+    fi
 fi
 
-# ── Step 5: Inject shrutz() shell function ─────────────────────
-# Uses $HOME so it resolves correctly for any user, in any session.
-# Guarded by a marker comment so re-running install doesn't duplicate it.
-if [[ -n "$SHELL_RC" ]] && ! grep -q '# shrutz shell function' "$SHELL_RC" 2>/dev/null; then
-    cat >> "$SHELL_RC" << 'FUNC_EOF'
+# ── Step 6: Remove legacy shrutz() shell function if present ───
+# Previous versions injected a shell function — no longer needed
+# since shrutz is now a direct binary on PATH.
+if [[ -n "$SHELL_RC" ]] && grep -q '# shrutz shell function' "$SHELL_RC" 2>/dev/null; then
+    # Strip the block between the marker comment and the closing brace
+    perl -i -0pe 's/\n# shrutz shell function.*?^}\n//ms' "$SHELL_RC" 2>/dev/null || true
+    echo "  ✓  legacy shrutz() shell function removed from $SHELL_RC"
+fi
 
-# shrutz shell function — added by shrutz installer
-shrutz() {
-  case "$1" in
-    log)
-      tail -f "$HOME/.local/lib/shrutz/shrutz.log"
-      ;;
-    start)
-      launchctl load "$HOME/Library/LaunchAgents/local.shrutz.plist"
-      ;;
-    stop)
-      launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist"
-      ;;
-    status)
-      launchctl list | grep shrutz
-      ;;
-    *)
-      echo "Usage: shrutz [log|start|stop|status]"
-      ;;
-  esac
-}
-FUNC_EOF
-    echo "  ✓  shrutz() function added to $SHELL_RC"
+# ── Step 7: Seed state file if absent ─────────────────────────
+if [[ ! -f "$LIB/state" ]]; then
+    printf 'CURRENT_INDEX=0\nACTIVE_SECONDS=0\nACTIVE_SET=default\n' > "$LIB/state"
+    echo "  ✓  state file initialised"
 else
-    echo "  ↩  shrutz() already in $SHELL_RC — skipped"
+    # Patch legacy state files that lack ACTIVE_SET
+    if ! grep -q '^ACTIVE_SET=' "$LIB/state" 2>/dev/null; then
+        echo 'ACTIVE_SET=default' >> "$LIB/state"
+        echo "  ✓  state file patched (ACTIVE_SET added)"
+    else
+        echo "  ↩  state file present — skipped"
+    fi
 fi
 
-# ── Step 6: Write the LaunchAgent plist ────────────────────────
-# Plists do NOT support shell variable expansion — real paths must be
-# written in at install time. The source of truth lives in ~/.local/etc/launchd/
-# and is symlinked into ~/Library/LaunchAgents/ so your ~/.local stays canonical.
+# ── Step 8: Write the LaunchAgent plist ────────────────────────
 cat > "$PLIST" << PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -98,12 +113,11 @@ cat > "$PLIST" << PLIST_EOF
 <plist version="1.0">
 <dict>
 
-    <!-- Unique reverse-DNS label. launchctl uses this as the job ID. -->
     <key>Label</key>
     <string>$LABEL</string>
 
-    <!-- The command launchd will run. Using /usr/bin/env bash makes it
-         independent of wherever bash lives on this machine. -->
+    <!-- No arguments = daemon mode. The shrutz binary checks argv[1]
+         and falls through to run_daemon when nothing is passed. -->
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/env</string>
@@ -111,15 +125,12 @@ cat > "$PLIST" << PLIST_EOF
         <string>$BIN/shrutz</string>
     </array>
 
-    <!-- Start the job as soon as the agent is loaded (i.e. at login). -->
     <key>RunAtLoad</key>
     <true/>
 
-    <!-- If shrutz exits for any reason, launchd restarts it automatically. -->
     <key>KeepAlive</key>
     <true/>
 
-    <!-- Stdout/stderr go to the lib folder alongside state and logs. -->
     <key>StandardOutPath</key>
     <string>$LIB/shrutz.log</string>
     <key>StandardErrorPath</key>
@@ -131,15 +142,12 @@ PLIST_EOF
 
 echo "  ✓  $PLIST"
 
-# ── Step 7: Symlink into LaunchAgents ──────────────────────────
-# Source of truth = ~/.local/etc/launchd/
-# macOS reads from  = ~/Library/LaunchAgents/
-# Symlink keeps both in sync without copying.
+# ── Step 9: Symlink into LaunchAgents ──────────────────────────
 [[ -L "$LINK" || -f "$LINK" ]] && rm -f "$LINK"
 ln -s "$PLIST" "$LINK"
 echo "  ✓  Symlinked → $LINK"
 
-# ── Step 8: Load the agent (takes effect immediately) ──────────
+# ── Step 10: Load the agent ────────────────────────────────────
 launchctl unload "$LINK" 2>/dev/null || true
 launchctl load   "$LINK"
 echo "  ✓  Agent loaded and running"
@@ -147,21 +155,28 @@ echo "  ✓  Agent loaded and running"
 # ── Done ───────────────────────────────────────────────────────
 echo ""
 echo "  Layout"
-echo "  ──────────────────────────────────────────────────────"
-echo "  ~/.local/bin/shrutz                      main script"
-echo "  ~/.local/lib/shrutz/wallpapers/          put images here"
-echo "  ~/.local/lib/shrutz/state                active index + timer"
-echo "  ~/.local/lib/shrutz/shrutz.log           activity log"
-echo "  ~/.local/lib/shrutz/shrutz.err           stderr (crash info)"
-echo "  ~/.local/etc/launchd/local.shrutz.plist  plist source"
-echo "  ~/Library/LaunchAgents/local.shrutz.plist → (symlink)"
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  ~/.local/bin/shrutz                           main binary"
+echo "  ~/.local/lib/shrutz/wallpapers/<set>/         wallpaper sets"
+echo "  ~/.local/lib/shrutz/wallpapers/default/       default set"
+echo "  ~/.local/lib/shrutz/state                     active index + timer"
+echo "  ~/.local/lib/shrutz/shrutz.log                activity log"
+echo "  ~/.local/lib/shrutz/shrutz.err                stderr (crash info)"
+echo "  ~/.local/etc/launchd/local.shrutz.plist       plist source"
+echo "  ~/Library/LaunchAgents/local.shrutz.plist  →  (symlink)"
 echo ""
 echo "  Commands (reload your shell first: source $SHELL_RC)"
-echo "  ──────────────────────────────────────────────────────"
-echo "  shrutz log     stream the live log"
-echo "  shrutz start   load and start the agent"
-echo "  shrutz stop    unload and stop the agent"
-echo "  shrutz status  check if the daemon is running"
+echo "  ──────────────────────────────────────────────────────────────"
+echo "  shrutz status              daemon status"
+echo "  shrutz log                 stream the live log"
+echo "  shrutz start / stop        manage the daemon"
+echo "  shrutz sets                list all wallpaper sets"
+echo "  shrutz set create <name>   create a new set"
+echo "  shrutz set info <name>     set details and progress"
+echo "  shrutz switch <set>        switch active wallpaper set"
+echo "  shrutz import <path>       import images into active set"
+echo "  shrutz help                full command reference"
 echo ""
-echo "  Drop your wallpapers into: $WALLS"
+echo "  Drop wallpapers into: $WALLS_DEFAULT"
+echo "  Or: shrutz import ~/path/to/images"
 echo ""
