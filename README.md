@@ -44,7 +44,7 @@ State (current wallpaper index, accumulated active time, active set, shuffle ord
 Clone the repository and run the installer:
 
 ```bash
-git clone https://github.com/yourusername/shrutz.git
+git clone https://github.com/burpcat/shrutz.git
 cd shrutz
 chmod +x shrutz install.sh
 ./install.sh
@@ -53,19 +53,28 @@ chmod +x shrutz install.sh
 The installer will:
 
 1. Create the `~/.local` directory layout
-2. Install the binary to `~/.local/bin/shrutz`
-3. Create the `default` wallpaper set
+2. Prompt for a folder of wallpapers to import into the `default` set
+3. Install the binary to `~/.local/bin/shrutz`
 4. Register a `launchd` agent that starts automatically at login
 5. Add `~/.local/bin` to your `PATH` and register the man page
 
-After installation, reload your shell and drop images into your default set — or use `shrutz import`:
+The wallpaper prompt looks like this:
+
+```
+  Where are your wallpapers?
+  Enter a folder path to import now, or press Enter to skip.
+
+  Path (or Enter to skip): ~/Pictures/my-wallpapers/
+  ✓  42 images imported, 0 skipped
+```
+
+Press Enter to skip and add images later with `shrutz import`. Supported formats: `.jpg`, `.jpeg`, `.png`, `.heic`, `.webp`
+
+After installation reload your shell:
 
 ```bash
 source ~/.zshrc
-shrutz import ~/Pictures/my-wallpapers/
 ```
-
-Supported formats: `.jpg`, `.jpeg`, `.png`, `.heic`, `.webp`
 
 ---
 

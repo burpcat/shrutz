@@ -54,6 +54,60 @@ else
     echo "  ↩  default set already exists — skipped"
 fi
 
+# ── Step 3b: Prompt for initial wallpaper set ──────────────────
+echo ""
+echo "  Where are your wallpapers?"
+echo "  Enter a folder path to import now, or press Enter to skip."
+echo "  (Supported: .jpg .jpeg .png .heic .webp)"
+echo ""
+printf "  Path (or Enter to skip): "
+read -r WALL_SRC
+
+# Strip trailing slash for clean path handling
+WALL_SRC="${WALL_SRC%/}"
+
+if [[ -z "$WALL_SRC" ]]; then
+    echo "  ↩  skipped — add images later with: shrutz import <path>"
+elif [[ ! -d "$WALL_SRC" ]]; then
+    echo "  ✗  '$WALL_SRC' is not a directory — skipped"
+    echo "     Add images later with: shrutz import <path>"
+else
+    # Copy supported images inline — binary isn't on PATH yet so we
+    # can't call `shrutz import`; this mirrors _import_into in the script.
+    _install_import() {
+        local src="$1" dest="$2"
+        local added=0 skipped=0 fname
+        while IFS= read -r -d '' f; do
+            fname=$(basename "$f")
+            if [[ -f "$dest/$fname" ]]; then
+                (( skipped++ )) || true
+            else
+                cp "$f" "$dest/$fname"
+                (( added++ )) || true
+            fi
+        done < <(find "$src" -maxdepth 1 \
+            \( -iname "*.jpg"  -o -iname "*.jpeg" \
+            -o -iname "*.png"  -o -iname "*.heic" \
+            -o -iname "*.webp" \) \
+            -print0)
+        echo "  ✓  $added images imported, $skipped skipped (duplicate filename)"
+        # Refresh __init__ image count
+        local count
+        count=$(find "$dest" -maxdepth 1 \
+            \( -iname "*.jpg" -o -iname "*.jpeg" \
+            -o -iname "*.png" -o -iname "*.heic" \
+            -o -iname "*.webp" \) | wc -l | tr -d ' ')
+        local init="$dest/__init__"
+        if [[ -f "$init" ]]; then
+            local tmp; tmp=$(grep -v '^images=' "$init")
+            printf '%s\nimages=%s\n' "$tmp" "$count" > "$init"
+        fi
+    }
+    echo "  Importing from '$WALL_SRC'..."
+    _install_import "$WALL_SRC" "$WALLS_DEFAULT"
+fi
+echo ""
+
 # ── Step 4: Install script ─────────────────────────────────────
 cp "$SRC" "$BIN/shrutz"
 chmod +x "$BIN/shrutz"
@@ -196,5 +250,5 @@ echo "  shrutz import <path>       import images into active set"
 echo "  shrutz help                full command reference"
 echo ""
 echo "  Drop wallpapers into: $WALLS_DEFAULT"
-echo "  Or: shrutz import ~/path/to/images"
+echo "  Or add more anytime:  shrutz import ~/path/to/images"
 echo ""
