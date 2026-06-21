@@ -166,6 +166,32 @@ away and the timer freezes. Default: 60.
 How often the daemon polls idle time and checks for mismatches, in
 seconds. Default: 30.
 .RE
+.SH UNINSTALL COMMANDS
+.TP
+.B shrutz dieanddontcomeback
+Remove the shrutz binary after confirmation. Prompts
+.B really?
+and proceeds only if the answer contains the word
+.I yes
+(case-insensitive).
+Your wallpaper sets, state file, and logs under
+.I ~/.local/lib/shrutz/
+are left completely untouched. The launchd agent is stopped before
+the binary is removed.
+.TP
+.BR "shrutz dieanddontcomeback \-\-ever" " | " "\-e"
+Full uninstall after confirmation. Stops the daemon, removes the binary,
+the launchd agent plist, the man page, and the entire
+.I ~/.local/lib/shrutz/
+tree including all wallpaper sets, state, and logs. Also strips the
+.B PATH
+and
+.B MANPATH
+lines added by the installer from
+.I .zshrc
+and
+.IR .bashrc .
+There is no undo.
 .SH FILES
 .TP
 .I ~/.local/bin/shrutz
@@ -221,43 +247,53 @@ Restart (sent by
 .BR "shrutz set rename" ,
 and
 .BR "shrutz config" ).
+Also sent by
+.B shrutz dieanddontcomeback
+to stop the daemon before removal.
 launchd with
 .B KeepAlive=true
-restarts the daemon automatically.
+restarts the daemon automatically on all cases except uninstall, where
+the plist is unloaded first.
 .SH REQUIREMENTS
 macOS 14 Sonoma or later. bash and python3 (both ship with macOS).
 No third-party dependencies.
 .SH INSTALLATION
 .nf
-git clone https://github.com/yourusername/shrutz.git
+git clone https://github.com/burpcat/shrutz.git
 cd shrutz
 chmod +x shrutz install.sh
 ./install.sh
 .fi
 .PP
-After installation, reload your shell and drop images into
-.IR ~/.local/lib/shrutz/wallpapers/default/ ,
-or use
-.B shrutz import
-to bring them in.
-.SH UNINSTALL
+The installer prompts for a wallpaper folder to import into the default
+set during setup. Press Enter to skip and add images later with
+.BR "shrutz import" .
+After installation reload your shell:
+.PP
 .nf
-shrutz stop
-rm ~/Library/LaunchAgents/local.shrutz.plist
-rm -rf ~/.local/bin/shrutz \\
-       ~/.local/lib/shrutz \\
-       ~/.local/etc/launchd/local.shrutz.plist \\
-       ~/.local/share/man/man1/shrutz.1
+source ~/.zshrc
 .fi
 .PP
-Also remove the
-.B PATH
-and
-.B MANPATH
-lines added by the installer from your
+The installer adds two lines to your
 .I .zshrc
 or
-.IR .bashrc .
+.IR .bashrc :
+.PP
+.nf
+export PATH="$HOME/.local/bin:$PATH"
+export MANPATH="$HOME/.local/share/man:$MANPATH"
+.fi
+.PP
+These are the only modifications made to your shell configuration.
+.SH UNINSTALL
+shrutz uninstalls itself. Use
+.B shrutz dieanddontcomeback
+to remove the binary while keeping your wallpaper sets, or
+.B "shrutz dieanddontcomeback \-\-ever"
+for a full wipe. Both commands prompt for confirmation before doing
+anything. See
+.B UNINSTALL COMMANDS
+above for full details.
 .SH SEE ALSO
 .BR launchctl (1),
 .BR launchd (8),
