@@ -1,4 +1,4 @@
-iname: shrutz CI
+name: shrutz CI
 
 on:
   push:
@@ -32,6 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/feat/adds' && github.event_name == 'push'
 
+    permissions:
+      contents: write       # ← required to push
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,5 +50,5 @@ jobs:
       - name: Merge feat/adds into master
         run: |
           git checkout master
-          git merge --ff-only origin/feat/adds
+          git merge --no-ff origin/feat/adds -m "chore: auto-merge feat/adds into master [ci]"
           git push origin master
