@@ -1016,3 +1016,160 @@ STATE
     run grep "^images=" "$WALLPAPER_BASE/default/__init__"
     [[ "$output" == "images=2" ]]
 }
+
+# ══════════════════════════════════════════════════════════════════
+# DIEANDDONTCOMEBACK — soft delete and full wipe
+# ══════════════════════════════════════════════════════════════════
+
+@test "dieanddontcomeback: cancelled when answer does not contain yes" {
+    run bash -c "echo 'no' | '$SHRUTZ' dieanddontcomeback"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"fine, staying"* ]]
+    [ -f "$SHRUTZ" ]
+}
+
+@test "dieanddontcomeback: cancelled when answer is y alone" {
+    run bash -c "echo 'y' | '$SHRUTZ' dieanddontcomeback"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"fine, staying"* ]]
+    [ -f "$SHRUTZ" ]
+}
+
+@test "dieanddontcomeback: cancelled when answer is yep" {
+    run bash -c "echo 'yep' | '$SHRUTZ' dieanddontcomeback"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"fine, staying"* ]]
+    [ -f "$SHRUTZ" ]
+}
+
+@test "dieanddontcomeback: accepts bare 'yes'" {
+    run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"fine, staying"* ]]
+}
+
+@test "dieanddontcomeback: accepts 'yes' anywhere in the answer" {
+    run bash -c "echo 'yeah yes go ahead' | '$SHRUTZ' dieanddontcomeback"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"fine, staying"* ]]
+}
+
+@test "dieanddontcomeback: accepts uppercase YES" {
+    run bash -c "echo 'YES' | '$SHRUTZ' dieanddontcomeback"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"fine, staying"* ]]
+}
+
+@test "dieanddontcomeback: soft delete removes the binary" {
+    run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
+    [ "$status" -eq 0 ]
+    [ ! -f "$SHRUTZ" ]
+}
+
+@test "dieanddontcomeback: soft delete preserves wallpaper sets" {
+    make_images "$WALLPAPER_BASE/default" 3
+    "$SHRUTZ" set create nature
+    make_images "$WALLPAPER_BASE/nature" 2
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
+    [ -d "$WALLPAPER_BASE/default" ]
+    [ -d "$WALLPAPER_BASE/nature" ]
+    [ -f "$WALLPAPER_BASE/default/1.png" ]
+}
+
+@test "dieanddontcomeback: soft delete preserves state file" {
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
+    [ -f "$STATE_FILE" ]
+}
+
+@test "dieanddontcomeback: soft delete preserves log file" {
+    printf '[2025-01-01 09:00:00] shrutz started\n' > "$LOG_FILE"
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
+    [ -f "$LOG_FILE" ]
+}
+
+@test "dieanddontcomeback: soft delete output mentions wallpapers are untouched" {
+    run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
+    [[ "$output" == *"untouched"* ]]
+}
+
+@test "dieanddontcomeback --ever: cancelled when answer does not contain yes" {
+    run bash -c "echo 'nope' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"fine, staying"* ]]
+    [ -f "$SHRUTZ" ]
+}
+
+@test "dieanddontcomeback --ever: removes the binary" {
+    run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ "$status" -eq 0 ]
+    [ ! -f "$SHRUTZ" ]
+}
+
+@test "dieanddontcomeback --ever: removes the entire lib directory" {
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ ! -d "$SHRUTZ_LIB" ]
+}
+
+@test "dieanddontcomeback --ever: removes wallpaper sets" {
+    make_images "$WALLPAPER_BASE/default" 3
+    "$SHRUTZ" set create nature
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ ! -d "$WALLPAPER_BASE" ]
+}
+
+@test "dieanddontcomeback --ever: removes launchd plist" {
+    touch "$TEST_HOME/.local/etc/launchd/local.shrutz.plist"
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ ! -f "$TEST_HOME/.local/etc/launchd/local.shrutz.plist" ]
+}
+
+@test "dieanddontcomeback --ever: removes man page if present" {
+    mkdir -p "$TEST_HOME/.local/share/man/man1"
+    touch "$TEST_HOME/.local/share/man/man1/shrutz.1"
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ ! -f "$TEST_HOME/.local/share/man/man1/shrutz.1" ]
+}
+
+@test "dieanddontcomeback -e: short flag works identically to --ever" {
+    run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback -e"
+    [ "$status" -eq 0 ]
+    [ ! -f "$SHRUTZ" ]
+    [ ! -d "$SHRUTZ_LIB" ]
+}
+
+@test "dieanddontcomeback --ever: strips PATH line from .zshrc" {
+    local rc="$TEST_HOME/.zshrc"
+    printf '# Added by shrutz installer\nexport PATH="$HOME/.local/bin:$PATH"\n' > "$rc"
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    run grep '\.local/bin' "$rc"
+    [ "$status" -ne 0 ]
+}
+
+@test "dieanddontcomeback --ever: strips MANPATH line from .zshrc" {
+    local rc="$TEST_HOME/.zshrc"
+    printf 'export MANPATH="$HOME/.local/share/man:$MANPATH"\n' > "$rc"
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    run grep 'MANPATH' "$rc"
+    [ "$status" -ne 0 ]
+}
+
+@test "dieanddontcomeback --ever: leaves unrelated .zshrc content intact" {
+    local rc="$TEST_HOME/.zshrc"
+    printf 'export NVM_DIR="$HOME/.nvm"\n# Added by shrutz installer\nexport PATH="$HOME/.local/bin:$PATH"\nalias ll="ls -la"\n' > "$rc"
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    run grep 'NVM_DIR' "$rc"
+    [ "$status" -eq 0 ]
+    run grep 'alias ll' "$rc"
+    [ "$status" -eq 0 ]
+}
+
+@test "dieanddontcomeback --ever: exits 0 cleanly when .zshrc does not exist" {
+    run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ "$status" -eq 0 ]
+}
+
+@test "dieanddontcomeback: no args (no flag) prompts and does soft delete only" {
+    # Confirm it's the soft path: lib dir must survive
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
+    [ -d "$SHRUTZ_LIB" ]
+}
