@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - feat/adds
-  pull_request:
-    branches:
-      - master
 
 jobs:
   test:
@@ -30,10 +27,6 @@ jobs:
     name: Merge feat/adds → master
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/feat/adds' && github.event_name == 'push'
-
-    permissions:
-      contents: write       # ← required to push
 
     steps:
       - name: Checkout
@@ -50,5 +43,5 @@ jobs:
       - name: Merge feat/adds into master
         run: |
           git checkout master
-          git merge --no-ff origin/feat/adds -m "chore: auto-merge feat/adds into master [ci]"
+          git merge --ff-only origin/feat/adds
           git push origin master
