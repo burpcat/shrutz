@@ -18,7 +18,7 @@ ETC="$HOME/.local/etc/launchd"
 MAN="$HOME/.local/share/man/man1"
 
 WALLS_BASE="$LIB/wallpapers"
-WALLS_DEFAULT="$WALLS_BASE/default"
+WALLS_DEFAULT="$WALLS_BASE/hassan"
 
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 LABEL="local.shrutz"
@@ -45,7 +45,7 @@ echo "  ✓  ~/.local tree ready"
 # ── Step 3: Write default set __init__ if absent ───────────────
 if [[ ! -f "$WALLS_DEFAULT/__init__" ]]; then
     cat > "$WALLS_DEFAULT/__init__" << INIT_EOF
-name=default
+name=hassan
 created=$(date '+%Y-%m-%d %H:%M:%S')
 images=0
 INIT_EOF

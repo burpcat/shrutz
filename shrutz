@@ -42,7 +42,7 @@ die() {
 load_state() {
     CURRENT_INDEX=0
     ACTIVE_SECONDS=0
-    ACTIVE_SET="default"
+    ACTIVE_SET="hassan"
     PAUSED=0
     PLAY_ORDER=""        # space-separated shuffle order; empty = sequential
     SHRUTZ_REPO=""       # path to the git repo, set by installer
