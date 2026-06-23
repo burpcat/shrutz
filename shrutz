@@ -42,7 +42,7 @@ die() {
 load_state() {
     CURRENT_INDEX=0
     ACTIVE_SECONDS=0
-    ACTIVE_SET="hassan"
+    ACTIVE_SET="default"
     PAUSED=0
     PLAY_ORDER=""        # space-separated shuffle order; empty = sequential
     SHRUTZ_REPO=""       # path to the git repo, set by installer
@@ -111,8 +111,10 @@ refresh_init_count() {
 }
 
 # Get the PID of the running daemon (launchd-managed shrutz process).
+# launchd spawns: /usr/bin/env bash ~/.local/bin/shrutz  (no arguments)
+# We match on the script path itself — specific enough to avoid false positives.
 daemon_pid() {
-    pgrep -f "shrutz daemon" 2>/dev/null | head -1
+    pgrep -f "$HOME/.local/bin/shrutz" 2>/dev/null | head -1
 }
 
 # Signal the daemon to restart via launchd (SIGTERM → launchd restarts it).
@@ -317,7 +319,9 @@ print(' '.join(map(str, order)))
     _sig_next() {
         _advance_index
         local wp; wp=$(_resolve_wallpaper)
-        apply_all_spaces "$wp"
+        # Fast path: apply to current space instantly via AppleScript.
+        # The poll loop corrects remaining spaces within 30 seconds.
+        apply_to_current_space "$wp"
         log "next → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$wp") (timer unchanged)"
         save_state
     }
@@ -325,7 +329,9 @@ print(' '.join(map(str, order)))
     _sig_prev() {
         _retreat_index
         local wp; wp=$(_resolve_wallpaper)
-        apply_all_spaces "$wp"
+        # Fast path: apply to current space instantly via AppleScript.
+        # The poll loop corrects remaining spaces within 30 seconds.
+        apply_to_current_space "$wp"
         log "prev → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$wp") (timer unchanged)"
         save_state
     }
