@@ -19,6 +19,7 @@ MAN="$HOME/.local/share/man/man1"
 
 WALLS_BASE="$LIB/wallpapers"
 WALLS_DEFAULT="$WALLS_BASE/hassan"
+ACTIVE_SET_DEFAULT="$(basename "$WALLS_DEFAULT")"   # keep state's ACTIVE_SET in sync with the dir we actually create
 
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 LABEL="local.shrutz"
@@ -147,12 +148,12 @@ fi
 
 # ── Step 7: Seed state file if absent ─────────────────────────
 if [[ ! -f "$LIB/state" ]]; then
-    printf 'CURRENT_INDEX=0\nACTIVE_SECONDS=0\nACTIVE_SET=default\n' > "$LIB/state"
+    printf 'CURRENT_INDEX=0\nACTIVE_SECONDS=0\nACTIVE_SET=%s\n' "$ACTIVE_SET_DEFAULT" > "$LIB/state"
     echo "  ✓  state file initialised"
 else
     # Patch legacy state files that lack ACTIVE_SET
     if ! grep -q '^ACTIVE_SET=' "$LIB/state" 2>/dev/null; then
-        echo 'ACTIVE_SET=default' >> "$LIB/state"
+        echo "ACTIVE_SET=$ACTIVE_SET_DEFAULT" >> "$LIB/state"
         echo "  ✓  state file patched (ACTIVE_SET added)"
     else
         echo "  ↩  state file present — skipped"
@@ -230,7 +231,7 @@ echo "  Layout"
 echo "  ──────────────────────────────────────────────────────────────"
 echo "  ~/.local/bin/shrutz                           main binary"
 echo "  ~/.local/lib/shrutz/wallpapers/<set>/         wallpaper sets"
-echo "  ~/.local/lib/shrutz/wallpapers/default/       default set"
+echo "  ~/.local/lib/shrutz/wallpapers/$ACTIVE_SET_DEFAULT/       default set"
 echo "  ~/.local/lib/shrutz/state                     active index + timer"
 echo "  ~/.local/lib/shrutz/shrutz.log                activity log"
 echo "  ~/.local/lib/shrutz/shrutz.err                stderr (crash info)"
