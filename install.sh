@@ -18,7 +18,7 @@ ETC="$HOME/.local/etc/launchd"
 MAN="$HOME/.local/share/man/man1"
 
 WALLS_BASE="$LIB/wallpapers"
-WALLS_DEFAULT="$WALLS_BASE/hassan"
+WALLS_DEFAULT="$WALLS_BASE/haasan"
 ACTIVE_SET_DEFAULT="$(basename "$WALLS_DEFAULT")"   # keep state's ACTIVE_SET in sync with the dir we actually create
 
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
@@ -26,7 +26,8 @@ LABEL="local.shrutz"
 PLIST="$ETC/$LABEL.plist"
 LINK="$LAUNCH_AGENTS/$LABEL.plist"
 
-SRC="$(cd "$(dirname "$0")" && pwd)/shrutz"
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+SRC="$REPO_DIR/shrutz"
 
 # ── Step 1: Check source script ────────────────────────────────
 echo ""
@@ -43,10 +44,31 @@ fi
 mkdir -p "$BIN" "$LIB" "$WALLS_DEFAULT" "$ETC" "$LAUNCH_AGENTS" "$MAN"
 echo "  ✓  ~/.local tree ready"
 
+# ── Step 2b: Symlink the repo's wallpapers/ to the canonical store ─
+# Keeps images in exactly one place (this dir) while still letting you
+# browse/drop files in from the repo checkout — same idea as the
+# launchd plist symlink below (canonical copy + a symlink to it).
+REPO_WALLS="$REPO_DIR/wallpapers"
+if [[ -L "$REPO_WALLS" ]]; then
+    if [[ "$(readlink "$REPO_WALLS")" != "$WALLS_BASE" ]]; then
+        rm -f "$REPO_WALLS"
+        ln -s "$WALLS_BASE" "$REPO_WALLS"
+        echo "  ✓  repo wallpapers/ symlink repaired → $WALLS_BASE"
+    else
+        echo "  ↩  repo wallpapers/ symlink already correct — skipped"
+    fi
+elif [[ -e "$REPO_WALLS" ]]; then
+    echo "  ✗  '$REPO_WALLS' exists and isn't a symlink — leaving it alone"
+    echo "     Move its contents into $WALLS_BASE and re-run install.sh to link it."
+else
+    ln -s "$WALLS_BASE" "$REPO_WALLS"
+    echo "  ✓  repo wallpapers/ → symlinked to $WALLS_BASE"
+fi
+
 # ── Step 3: Write default set __init__ if absent ───────────────
 if [[ ! -f "$WALLS_DEFAULT/__init__" ]]; then
     cat > "$WALLS_DEFAULT/__init__" << INIT_EOF
-name=hassan
+name=$ACTIVE_SET_DEFAULT
 created=$(date '+%Y-%m-%d %H:%M:%S')
 images=0
 INIT_EOF
@@ -217,7 +239,6 @@ else
 fi
 
 # ── Step 12: Record repo path in state ────────────────────────
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 if grep -q '^SHRUTZ_REPO=' "$LIB/state" 2>/dev/null; then
     sed -i '' "s|^SHRUTZ_REPO=.*|SHRUTZ_REPO=$REPO_DIR|" "$LIB/state"
 else
