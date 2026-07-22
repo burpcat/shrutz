@@ -18,6 +18,7 @@ LOG_FILE="$SHRUTZ_LIB/shrutz.log"
 WALLPAPER_STORE="$HOME/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
 SHRUTZ_BIN="$HOME/.local/bin/shrutz"
 LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/local.shrutz.plist"
+LAUNCHD_LABEL="local.shrutz"
 WEATHER_MAP_FILE="$SHRUTZ_LIB/weather_map"
 
 # ── Tunables ───────────────────────────────────────────────────
@@ -686,6 +687,26 @@ print(' '.join(map(str, order)))
 # ══════════════════════════════════════════════════════════════════
 
 cmd_status() {
+    if [[ "${1:-}" == "--json" ]]; then
+        local out loaded="false" pid=0 last_exit=0
+        if out=$(launchctl list "$LAUNCHD_LABEL" 2>/dev/null); then
+            loaded="true"
+            pid=$(echo "$out" | grep '"PID"' | grep -oE '[0-9]+' | head -1)
+            last_exit=$(echo "$out" | grep '"LastExitStatus"' | grep -oE '\-?[0-9]+' | head -1)
+            [[ -z "$pid" ]] && pid=0
+            [[ -z "$last_exit" ]] && last_exit=0
+        fi
+        SJ_LOADED="$loaded" SJ_PID="$pid" SJ_EXIT="$last_exit" python3 << 'PYEOF'
+import json, os
+print(json.dumps({
+    "loaded": os.environ['SJ_LOADED'] == "true",
+    "pid": int(os.environ['SJ_PID']),
+    "last_exit_status": int(os.environ['SJ_EXIT']),
+}))
+PYEOF
+        return
+    fi
+
     launchctl list | grep shrutz || echo "shrutz: daemon not running"
 }
 
@@ -704,6 +725,40 @@ cmd_stop() {
 # ── shrutz sets ────────────────────────────────────────────────
 cmd_sets() {
     load_state
+
+    if [[ "${1:-}" == "--json" ]]; then
+        local rows=""
+        for dir in "$WALLPAPER_BASE"/*/; do
+            [[ -d "$dir" ]] || continue
+            local name images created shuffle active
+            name=$(basename "$dir")
+            images=$(count_images "$dir")
+            created=$(init_field "$dir" "created")
+            shuffle="false"
+            [[ "$(init_field "$dir" "shuffle")" == "true" ]] && shuffle="true"
+            active="false"
+            [[ "$name" == "$ACTIVE_SET" ]] && active="true"
+            rows+="${name}"$'\t'"${images}"$'\t'"${created}"$'\t'"${active}"$'\t'"${shuffle}"$'\n'
+        done
+        SETS_ROWS="$rows" python3 << 'PYEOF'
+import json, os
+out = []
+for line in os.environ['SETS_ROWS'].splitlines():
+    if not line:
+        continue
+    name, images, created, active, shuffle = line.split('\t')
+    out.append({
+        "name": name,
+        "images": int(images),
+        "created": created,
+        "active": active == "true",
+        "shuffle": shuffle == "true",
+    })
+print(json.dumps(out))
+PYEOF
+        return
+    fi
+
     local found=0
     printf '\n  %-24s  %-8s  %-20s  %s\n' "NAME" "IMAGES" "CREATED" ""
     printf '  %-24s  %-8s  %-20s\n' "────────────────────────" "────────" "────────────────────"
@@ -943,7 +998,7 @@ cmd_now() {
     local total
     total=$(count_images "$wallpaper_dir")
 
-    local current_name="(unknown)"
+    local current_name="(unknown)" current_path=""
     if (( total > 0 )); then
         # Rebuild sorted list to resolve name from index
         local files=()
@@ -954,13 +1009,43 @@ cmd_now() {
             -o -iname "*.png" -o -iname "*.heic" \
             -o -iname "*.webp" \) \
             -print0 | sort -z)
-        (( CURRENT_INDEX < ${#files[@]} )) && \
-            current_name=$(basename "${files[$CURRENT_INDEX]}")
+        if (( CURRENT_INDEX < ${#files[@]} )); then
+            current_path="${files[$CURRENT_INDEX]}"
+            current_name=$(basename "$current_path")
+        fi
+    fi
+
+    local seconds_remaining=$(( ACTIVE_SECS_NEEDED - ACTIVE_SECONDS ))
+    local shuffle="false"
+    [[ "$(init_field "$wallpaper_dir" "shuffle")" == "true" ]] && shuffle="true"
+    local paused="false"
+    (( PAUSED == 1 )) && paused="true"
+
+    if [[ "${1:-}" == "--json" ]]; then
+        NJ_WP="$current_name" NJ_PATH="$current_path" NJ_SET="$ACTIVE_SET" \
+        NJ_POS="$(( CURRENT_INDEX + 1 ))" NJ_TOTAL="$total" NJ_ACTIVE_SECS="$ACTIVE_SECONDS" \
+        NJ_MINS_NEEDED="$ACTIVE_MINS" NJ_REMAINING="$seconds_remaining" \
+        NJ_PAUSED="$paused" NJ_SHUFFLE="$shuffle" python3 << 'PYEOF'
+import json, os
+print(json.dumps({
+    "wallpaper": os.environ['NJ_WP'],
+    "wallpaper_path": os.environ['NJ_PATH'],
+    "set": os.environ['NJ_SET'],
+    "position": int(os.environ['NJ_POS']),
+    "total": int(os.environ['NJ_TOTAL']),
+    "active_seconds": int(os.environ['NJ_ACTIVE_SECS']),
+    "active_minutes_needed": int(os.environ['NJ_MINS_NEEDED']),
+    "seconds_remaining": int(os.environ['NJ_REMAINING']),
+    "paused": os.environ['NJ_PAUSED'] == "true",
+    "shuffle": os.environ['NJ_SHUFFLE'] == "true",
+}))
+PYEOF
+        return
     fi
 
     local mins_done mins_left
     mins_done=$(( ACTIVE_SECONDS / 60 ))
-    mins_left=$(( (ACTIVE_SECS_NEEDED - ACTIVE_SECONDS) / 60 ))
+    mins_left=$(( seconds_remaining / 60 ))
     local paused_label=""
     (( PAUSED == 1 )) && paused_label=" [PAUSED]"
 
@@ -976,6 +1061,24 @@ cmd_now() {
 cmd_config() {
     local script="$SHRUTZ_BIN"
     local key="${1:-}" val="${2:-}"
+
+    if [[ "$key" == "--json" ]]; then
+        local active_mins idle_threshold check_every weather_poll_mins
+        active_mins=$(grep -E '^ACTIVE_MINS=' "$script" | head -1 | cut -d= -f2 | cut -d'#' -f1 | tr -d ' ')
+        idle_threshold=$(grep -E '^IDLE_THRESHOLD=' "$script" | head -1 | cut -d= -f2 | cut -d'#' -f1 | tr -d ' ')
+        check_every=$(grep -E '^CHECK_EVERY=' "$script" | head -1 | cut -d= -f2 | cut -d'#' -f1 | tr -d ' ')
+        weather_poll_mins=$(grep -E '^WEATHER_POLL_MINS=' "$script" | head -1 | cut -d= -f2 | cut -d'#' -f1 | tr -d ' ')
+        CJ_MINS="$active_mins" CJ_IDLE="$idle_threshold" CJ_CHECK="$check_every" CJ_WEATHER="$weather_poll_mins" python3 << 'PYEOF'
+import json, os
+print(json.dumps({
+    "active_mins": int(os.environ['CJ_MINS']),
+    "idle_threshold": int(os.environ['CJ_IDLE']),
+    "check_every": int(os.environ['CJ_CHECK']),
+    "weather_poll_mins": int(os.environ['CJ_WEATHER']),
+}))
+PYEOF
+        return
+    fi
 
     if [[ -z "$key" ]]; then
         # Pretty-print current tunables
@@ -1268,8 +1371,9 @@ cmd_stats() {
         grep -oE '^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' | \
         tr -d '[]')
 
+    local elapsed_secs=0
     if [[ -n "$daemon_start" ]]; then
-        local start_epoch now_epoch elapsed_secs
+        local start_epoch now_epoch
         start_epoch=$(date -j -f '%Y-%m-%d %H:%M:%S' "$daemon_start" '+%s' 2>/dev/null || echo 0)
         now_epoch=$(date '+%s')
         elapsed_secs=$(( now_epoch - start_epoch ))
@@ -1287,6 +1391,29 @@ cmd_stats() {
         (( set_count++ )) || true
         (( total_images += $(count_images "$dir") )) || true
     done
+
+    local paused="false"
+    (( PAUSED == 1 )) && paused="true"
+
+    if [[ "${1:-}" == "--json" ]]; then
+        STJ_UPTIME_SECS="$elapsed_secs" STJ_UPTIME_HUMAN="$uptime_str" STJ_SWITCHES="$total_switches" \
+        STJ_SET_COUNT="$set_count" STJ_TOTAL_IMAGES="$total_images" STJ_ACTIVE_SET="$ACTIVE_SET" \
+        STJ_PAUSED="$paused" STJ_ACTIVE_SECS="$ACTIVE_SECONDS" STJ_MINS_NEEDED="$ACTIVE_MINS" python3 << 'PYEOF'
+import json, os
+print(json.dumps({
+    "uptime_seconds": int(os.environ['STJ_UPTIME_SECS']),
+    "uptime_human": os.environ['STJ_UPTIME_HUMAN'],
+    "total_switches": int(os.environ['STJ_SWITCHES']),
+    "set_count": int(os.environ['STJ_SET_COUNT']),
+    "total_images": int(os.environ['STJ_TOTAL_IMAGES']),
+    "active_set": os.environ['STJ_ACTIVE_SET'],
+    "paused": os.environ['STJ_PAUSED'] == "true",
+    "active_seconds": int(os.environ['STJ_ACTIVE_SECS']),
+    "active_minutes_needed": int(os.environ['STJ_MINS_NEEDED']),
+}))
+PYEOF
+        return
+    fi
 
     local paused_label=""
     (( PAUSED == 1 )) && paused_label=" (paused)"
@@ -1821,11 +1948,11 @@ cmd_dieanddontcomeback() {
 
 case "${1:-daemon}" in
     daemon)       run_daemon ;;
-    status)       cmd_status ;;
+    status)       shift; cmd_status "$@" ;;
     log)          cmd_log ;;
     start)        cmd_start ;;
     stop)         cmd_stop ;;
-    sets)         cmd_sets ;;
+    sets)         shift; cmd_sets "$@" ;;
     set)          shift; cmd_set "$@" ;;
     switch)       shift; cmd_switch "$@" ;;
     import)       shift; cmd_import "$@" ;;
@@ -1833,10 +1960,10 @@ case "${1:-daemon}" in
     prev)         cmd_prev ;;
     pause)        cmd_pause ;;
     resume)       cmd_resume ;;
-    now)          cmd_now ;;
+    now)          shift; cmd_now "$@" ;;
     config)       shift; cmd_config "$@" ;;
     weather)      shift; cmd_weather "$@" ;;
-    stats)        cmd_stats ;;
+    stats)        shift; cmd_stats "$@" ;;
     history)      shift; cmd_history "$@" ;;
     dash)         cmd_dash ;;
     export)       shift; cmd_export "$@" ;;
