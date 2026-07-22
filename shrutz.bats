@@ -1173,3 +1173,31 @@ STATE
     bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback"
     [ -d "$SHRUTZ_LIB" ]
 }
+
+# ══════════════════════════════════════════════════════════════════
+# MENUBAR
+# ══════════════════════════════════════════════════════════════════
+# Only the pure-bash guard clauses are covered here — actually invoking
+# xcodebuild is out of scope for this suite, same as cmd_update's `git
+# pull` is never exercised either.
+
+@test "menubar: unknown subcommand prints usage and exits non-zero" {
+    run "$SHRUTZ" menubar bogus
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Usage: shrutz menubar install"* ]]
+}
+
+@test "menubar install: dies when SHRUTZ_REPO is unknown" {
+    run "$SHRUTZ" menubar install
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"repo path unknown"* ]]
+}
+
+@test "menubar install: dies when the repo has no menubar/ Xcode project" {
+    local fake_repo="$TEST_HOME/fake-repo"
+    mkdir -p "$fake_repo"
+    printf 'CURRENT_INDEX=0\nACTIVE_SECONDS=0\nACTIVE_SET=default\nPAUSED=0\nPLAY_ORDER=\nSHRUTZ_REPO=%s\n' "$fake_repo" > "$STATE_FILE"
+    run "$SHRUTZ" menubar install
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"no ShrutzMenuBar.xcodeproj found"* ]]
+}

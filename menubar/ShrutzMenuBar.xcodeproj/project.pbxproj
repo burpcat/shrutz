@@ -1,0 +1,381 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		16EA2FA3742626AA1917DF50 /* WeatherSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */; };
+		36DAA64FB2302891805C0CFA /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6229F6560282793F60D3F218 /* GalleryView.swift */; };
+		37E2354EFF9A6A48FFDCDB29 /* ShrutzCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */; };
+		3B641451E9E6C50F0CDEDBC8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */; };
+		7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFD238900D6BD207D99599C /* LoginItemManager.swift */; };
+		7F878401F8867E162D3079C3 /* ShrutzState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C69135962231ACE365BD7B /* ShrutzState.swift */; };
+		85EF438E787F436706999503 /* MenuContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D668CC3A06C0DCEE8FC3B1D /* MenuContentView.swift */; };
+		A333985F01493AC4B26751B5 /* StateWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9340E3B495901BC7A39FB513 /* StateWatcher.swift */; };
+		CF5F31E06FC1126A8B005B83 /* ShrutzMenuBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */; };
+		D279C0BEFF23D240CDC8A6A3 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13BB02295ED61AC05180E70C /* AppState.swift */; };
+		EB0597EDEBD2262087BF475E /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99C1887C31A081D4F2E5162 /* PreferencesView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		13BB02295ED61AC05180E70C /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzMenuBarApp.swift; sourceTree = "<group>"; };
+		2D668CC3A06C0DCEE8FC3B1D /* MenuContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuContentView.swift; sourceTree = "<group>"; };
+		6229F6560282793F60D3F218 /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
+		77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzCLI.swift; sourceTree = "<group>"; };
+		89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9340E3B495901BC7A39FB513 /* StateWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateWatcher.swift; sourceTree = "<group>"; };
+		9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherSectionView.swift; sourceTree = "<group>"; };
+		A3C69135962231ACE365BD7B /* ShrutzState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzState.swift; sourceTree = "<group>"; };
+		C99C1887C31A081D4F2E5162 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		ECFD238900D6BD207D99599C /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
+		FC6FC8DCD6A43071969CCCCA /* ShrutzMenuBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShrutzMenuBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1CD4F9627F794C3D26177E0D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FC6FC8DCD6A43071969CCCCA /* ShrutzMenuBar.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		368B86832D83B7E22C964AA9 /* ShrutzMenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				13BB02295ED61AC05180E70C /* AppState.swift */,
+				89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */,
+				17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */,
+				ECD4C8FA0609752AA71DA8B9 /* Models */,
+				8B7BBAA91861DA5E3BD9F70C /* Services */,
+				9A23D7387E701F0D6D0C591B /* Views */,
+			);
+			path = ShrutzMenuBar;
+			sourceTree = "<group>";
+		};
+		8B7BBAA91861DA5E3BD9F70C /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				ECFD238900D6BD207D99599C /* LoginItemManager.swift */,
+				77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */,
+				9340E3B495901BC7A39FB513 /* StateWatcher.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		9A23D7387E701F0D6D0C591B /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				6229F6560282793F60D3F218 /* GalleryView.swift */,
+				2D668CC3A06C0DCEE8FC3B1D /* MenuContentView.swift */,
+				C99C1887C31A081D4F2E5162 /* PreferencesView.swift */,
+				9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		EAC71939E7736663C4C4E77C = {
+			isa = PBXGroup;
+			children = (
+				368B86832D83B7E22C964AA9 /* ShrutzMenuBar */,
+				1CD4F9627F794C3D26177E0D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		ECD4C8FA0609752AA71DA8B9 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A3C69135962231ACE365BD7B /* ShrutzState.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B8D6D6D6B1EEBCC11FE199D3 /* ShrutzMenuBar */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3581AB970B5EFD9985302FB5 /* Build configuration list for PBXNativeTarget "ShrutzMenuBar" */;
+			buildPhases = (
+				B6D13D313C9DF73BDC50F52F /* Sources */,
+				ECF94DB2CEF5DFD44CD59A7A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShrutzMenuBar;
+			packageProductDependencies = (
+			);
+			productName = ShrutzMenuBar;
+			productReference = FC6FC8DCD6A43071969CCCCA /* ShrutzMenuBar.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		41B5BE8D3AB97A572FBA01B7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					B8D6D6D6B1EEBCC11FE199D3 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 90EEF00915F193824D17A2D4 /* Build configuration list for PBXProject "ShrutzMenuBar" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = EAC71939E7736663C4C4E77C;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1CD4F9627F794C3D26177E0D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B8D6D6D6B1EEBCC11FE199D3 /* ShrutzMenuBar */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		ECF94DB2CEF5DFD44CD59A7A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3B641451E9E6C50F0CDEDBC8 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B6D13D313C9DF73BDC50F52F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D279C0BEFF23D240CDC8A6A3 /* AppState.swift in Sources */,
+				36DAA64FB2302891805C0CFA /* GalleryView.swift in Sources */,
+				7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */,
+				85EF438E787F436706999503 /* MenuContentView.swift in Sources */,
+				EB0597EDEBD2262087BF475E /* PreferencesView.swift in Sources */,
+				37E2354EFF9A6A48FFDCDB29 /* ShrutzCLI.swift in Sources */,
+				CF5F31E06FC1126A8B005B83 /* ShrutzMenuBarApp.swift in Sources */,
+				7F878401F8867E162D3079C3 /* ShrutzState.swift in Sources */,
+				A333985F01493AC4B26751B5 /* StateWatcher.swift in Sources */,
+				16EA2FA3742626AA1917DF50 /* WeatherSectionView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		05BF98B5C258FD8DA154AB21 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		379AED24ED4FA86FCEA198D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5E84CFEDF09C4A2F9A821808 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Generated/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.burpcat.shrutz.menubar;
+				PRODUCT_NAME = ShrutzMenuBar;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		758564EAC21EF7804B45BB36 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Generated/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.burpcat.shrutz.menubar;
+				PRODUCT_NAME = ShrutzMenuBar;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3581AB970B5EFD9985302FB5 /* Build configuration list for PBXNativeTarget "ShrutzMenuBar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				758564EAC21EF7804B45BB36 /* Debug */,
+				5E84CFEDF09C4A2F9A821808 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		90EEF00915F193824D17A2D4 /* Build configuration list for PBXProject "ShrutzMenuBar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				379AED24ED4FA86FCEA198D3 /* Debug */,
+				05BF98B5C258FD8DA154AB21 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 41B5BE8D3AB97A572FBA01B7 /* Project object */;
+}

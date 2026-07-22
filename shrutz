@@ -1888,6 +1888,51 @@ cmd_update() {
     echo "shrutz: update complete"
 }
 
+# ── shrutz menubar ─────────────────────────────────────────────
+# Opt-in only — never invoked by install.sh, since not everyone wants a
+# GUI helper running. Builds the companion menu bar app from source and
+# places it in ~/Applications, ad-hoc signed (no Apple Developer account
+# needed), matching how the CLI itself is only ever built/copied locally.
+cmd_menubar() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        install) cmd_menubar_install ;;
+        *) die "Usage: shrutz menubar install" ;;
+    esac
+}
+
+cmd_menubar_install() {
+    load_state
+
+    [[ -z "$SHRUTZ_REPO" ]] && die "repo path unknown — reinstall shrutz to register SHRUTZ_REPO"
+    local project_dir="$SHRUTZ_REPO/menubar"
+    [[ -d "$project_dir/ShrutzMenuBar.xcodeproj" ]] || die "no ShrutzMenuBar.xcodeproj found in $project_dir"
+
+    command -v xcodebuild &>/dev/null || \
+        die "xcodebuild not found — install Xcode (or the Command Line Tools) to build the menu bar app"
+
+    local build_dir
+    build_dir=$(mktemp -d "${TMPDIR:-/tmp}/shrutz-menubar-build-XXXXXX")
+    echo "shrutz: building ShrutzMenuBar..."
+    ( cd "$project_dir" && xcodebuild -project ShrutzMenuBar.xcodeproj -scheme ShrutzMenuBar \
+        -configuration Release -derivedDataPath "$build_dir" build ) \
+        || die "build failed — see output above"
+
+    local built_app="$build_dir/Build/Products/Release/ShrutzMenuBar.app"
+    [[ -d "$built_app" ]] || die "build succeeded but ShrutzMenuBar.app was not found at the expected path"
+
+    mkdir -p "$HOME/Applications"
+    local dest_app="$HOME/Applications/ShrutzMenuBar.app"
+    rm -rf "$dest_app"
+    cp -R "$built_app" "$dest_app"
+    rm -rf "$build_dir"
+
+    echo "shrutz: installed → $dest_app"
+    open "$dest_app"
+    echo "shrutz: launched. Look for the icon in your menu bar — enable "
+    echo "        \"Launch at Login\" from its Preferences if you'd like."
+}
+
 # ── shrutz dieanddontcomeback [--ever|-e] ─────────────────────
 cmd_dieanddontcomeback() {
     local full=0
@@ -1968,6 +2013,7 @@ case "${1:-daemon}" in
     dash)         cmd_dash ;;
     export)       shift; cmd_export "$@" ;;
     gallery)      shift; cmd_gallery "$@" ;;
+    menubar)      shift; cmd_menubar "$@" ;;
     update)       cmd_update ;;
     dieanddontcomeback) shift; cmd_dieanddontcomeback "$@" ;;
     -h|--help|help)
@@ -1980,6 +2026,7 @@ case "${1:-daemon}" in
         echo "  start                     load and start the daemon"
         echo "  stop                      unload and stop the daemon"
         echo "  update                    pull latest version and reinstall"
+        echo "  menubar install           build + install the menu bar companion app"
         echo ""
         echo "  Playback"
         echo "  ──────────────────────────────────────────────────"

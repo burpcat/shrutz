@@ -1,0 +1,37 @@
+name: ShrutzMenuBar
+options:
+  bundleIdPrefix: com.burpcat
+  deploymentTarget:
+    macOS: "14.0"
+
+targets:
+  ShrutzMenuBar:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ShrutzMenuBar
+    info:
+      path: Generated/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: shrutz
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        NSHumanReadableCopyright: "MIT"
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.burpcat.shrutz.menubar
+        PRODUCT_NAME: ShrutzMenuBar
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: NO
