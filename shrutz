@@ -36,7 +36,7 @@ WEATHER_CONDITIONS=(clear cloudy fog rain snow storm night)
 # ── Gallery ────────────────────────────────────────────────────
 # A separate section, not a tunable — kept out of cmd_config's key
 # whitelist so it's never mistaken for something meant to be edited live.
-GALLERY_MANIFEST_URL="https://raw.githubusercontent.com/burpcat/shrutz/master/gallery/manifest.json"
+GALLERY_MANIFEST_URL="https://raw.githubusercontent.com/burpcat/shrutz-wallpaper-repo/master/gallery/manifest.json"
 
 # ══════════════════════════════════════════════════════════════════
 # SHARED UTILITIES
@@ -85,11 +85,6 @@ save_state() {
         >> "$STATE_FILE"
 }
 
-# Resolve the active wallpaper directory from state.
-active_set_dir() {
-    echo "$WALLPAPER_BASE/$ACTIVE_SET"
-}
-
 # Read the __init__ field by key from a set directory.
 # Usage: init_field <set_dir> <key>
 init_field() {
@@ -105,6 +100,22 @@ count_images() {
         \( -iname "*.jpg" -o -iname "*.jpeg" \
         -o -iname "*.png" -o -iname "*.heic" \
         -o -iname "*.webp" \) 2>/dev/null | wc -l | tr -d ' '
+}
+
+# List image files (jpg/jpeg/png/heic/webp) in a directory, sorted by name,
+# into the global array SORTED_IMAGES. Same file-type filter as
+# count_images(). Shared by _activate_set, cmd_now, and cmd_dash, which
+# each used to duplicate this exact find+sort+array-build block inline.
+_list_sorted_images() {
+    local dir="$1"
+    SORTED_IMAGES=()
+    while IFS= read -r -d '' f; do
+        SORTED_IMAGES+=("$f")
+    done < <(find "$dir" -maxdepth 1 \
+        \( -iname "*.jpg"  -o -iname "*.jpeg" \
+        -o -iname "*.png"  -o -iname "*.heic" \
+        -o -iname "*.webp" \) \
+        -print0 2>/dev/null | sort -z)
 }
 
 # Check a set directory exists and is non-empty.
@@ -223,10 +234,6 @@ weather_map_remove() {
     [[ -f "$WEATHER_MAP_FILE" ]] || return 0
     local tmp; tmp=$(grep -v "^${condition}=" "$WEATHER_MAP_FILE")
     printf '%s\n' "$tmp" > "$WEATHER_MAP_FILE"
-}
-
-weather_map_list() {
-    [[ -f "$WEATHER_MAP_FILE" ]] && cat "$WEATHER_MAP_FILE"
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -450,14 +457,8 @@ _activate_set() {
     local name="$1" mode="${2:-switch}"
     local dir="$WALLPAPER_BASE/$name"
 
-    local new_wallpapers=()
-    while IFS= read -r -d '' f; do
-        new_wallpapers+=("$f")
-    done < <(find "$dir" -maxdepth 1 \
-        \( -iname "*.jpg"  -o -iname "*.jpeg" \
-        -o -iname "*.png"  -o -iname "*.heic" \
-        -o -iname "*.webp" \) \
-        -print0 2>/dev/null | sort -z)
+    _list_sorted_images "$dir"
+    local new_wallpapers=("${SORTED_IMAGES[@]}")
 
     local new_total=${#new_wallpapers[@]}
     (( new_total == 0 )) && return 1
@@ -1012,14 +1013,8 @@ cmd_now() {
     local current_name="(unknown)" current_path=""
     if (( total > 0 )); then
         # Rebuild sorted list to resolve name from index
-        local files=()
-        while IFS= read -r -d '' f; do
-            files+=("$f")
-        done < <(find "$wallpaper_dir" -maxdepth 1 \
-            \( -iname "*.jpg" -o -iname "*.jpeg" \
-            -o -iname "*.png" -o -iname "*.heic" \
-            -o -iname "*.webp" \) \
-            -print0 | sort -z)
+        _list_sorted_images "$wallpaper_dir"
+        local files=("${SORTED_IMAGES[@]}")
         if (( CURRENT_INDEX < ${#files[@]} )); then
             current_path="${files[$CURRENT_INDEX]}"
             current_name=$(basename "$current_path")
@@ -1554,14 +1549,8 @@ cmd_dash() {
         # Resolve current wallpaper name
         local current_name="(unknown)"
         if (( total > 0 )); then
-            local files=()
-            while IFS= read -r -d '' f; do
-                files+=("$f")
-            done < <(find "$wallpaper_dir" -maxdepth 1 \
-                \( -iname "*.jpg" -o -iname "*.jpeg" \
-                -o -iname "*.png" -o -iname "*.heic" \
-                -o -iname "*.webp" \) \
-                -print0 | sort -z)
+            _list_sorted_images "$wallpaper_dir"
+            local files=("${SORTED_IMAGES[@]}")
             if (( CURRENT_INDEX < ${#files[@]} )); then
                 if [[ -n "$PLAY_ORDER" && "$shuffle_flag" == "true" ]]; then
                     local order=($PLAY_ORDER)
