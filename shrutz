@@ -32,6 +32,11 @@ ACTIVE_SECS_NEEDED=$(( ACTIVE_MINS * 60 ))
 # Canonical weather condition vocabulary — used to validate `weather map`.
 WEATHER_CONDITIONS=(clear cloudy fog rain snow storm night)
 
+# ── Gallery ────────────────────────────────────────────────────
+# A separate section, not a tunable — kept out of cmd_config's key
+# whitelist so it's never mistaken for something meant to be edited live.
+GALLERY_MANIFEST_URL="https://raw.githubusercontent.com/burpcat/shrutz/master/gallery/manifest.json"
+
 # ══════════════════════════════════════════════════════════════════
 # SHARED UTILITIES
 # ══════════════════════════════════════════════════════════════════
@@ -1536,6 +1541,208 @@ cmd_export() {
     echo "shrutz: exported $size → $outfile"
 }
 
+# ── shrutz gallery (Creators Publish) ──────────────────────────
+cmd_gallery() {
+    local subcmd="${1:-list}"
+    (( $# > 0 )) && shift
+    case "$subcmd" in
+        list)    cmd_gallery_list "$@" ;;
+        install) cmd_gallery_install "$@" ;;
+        *) die "Usage: shrutz gallery <list|install> [args]" ;;
+    esac
+}
+
+_gallery_fetch_manifest() {
+    http_get "$GALLERY_MANIFEST_URL" 15
+}
+
+cmd_gallery_list() {
+    local json_mode=0
+    [[ "${1:-}" == "--json" ]] && json_mode=1
+
+    local manifest
+    manifest=$(_gallery_fetch_manifest) || \
+        die "could not reach the gallery manifest ($GALLERY_MANIFEST_URL) — check your network connection and try again"
+
+    if (( json_mode == 1 )); then
+        local installed_names=""
+        for d in "$WALLPAPER_BASE"/*/; do
+            [[ -d "$d" ]] || continue
+            installed_names+="$(basename "$d")"$'\n'
+        done
+        GALLERY_JSON="$manifest" GALLERY_INSTALLED="$installed_names" python3 << 'PYEOF' || die "gallery manifest could not be parsed"
+import json, os
+
+data = json.loads(os.environ['GALLERY_JSON'])
+installed = set(os.environ.get('GALLERY_INSTALLED', '').splitlines())
+out = []
+for s in data.get('sets', []):
+    out.append({
+        "name": s.get('name', ''),
+        "author": s.get('author', ''),
+        "description": s.get('description', ''),
+        "images": s.get('images', 0),
+        "thumbnail_url": s.get('thumbnail_url', ''),
+        "installed": s.get('name', '') in installed,
+    })
+print(json.dumps(out))
+PYEOF
+        return
+    fi
+
+    local rows
+    rows=$(GALLERY_JSON="$manifest" python3 << 'PYEOF'
+import json, os, sys
+try:
+    data = json.loads(os.environ['GALLERY_JSON'])
+    for s in data.get('sets', []):
+        print(f"{s.get('name','')}\t{s.get('author','')}\t{s.get('images',0)}\t{s.get('description','')}")
+except Exception as e:
+    print(f"error: {e}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+    ) || die "gallery manifest could not be parsed"
+
+    echo ""
+    printf '  %-20s  %-14s  %-8s  %-10s  %s\n' "NAME" "AUTHOR" "IMAGES" "INSTALLED" "DESCRIPTION"
+    printf '  %-20s  %-14s  %-8s  %-10s\n' "────────────────────" "──────────────" "────────" "──────────"
+    while IFS=$'\t' read -r name author images desc; do
+        [[ -z "$name" ]] && continue
+        local mark="no"
+        [[ -d "$WALLPAPER_BASE/$name" ]] && mark="yes"
+        printf '  %-20s  %-14s  %-8s  %-10s  %s\n' "$name" "$author" "$images" "$mark" "$desc"
+    done <<< "$rows"
+    echo ""
+    echo "  Install with: shrutz gallery install <name>"
+    echo ""
+}
+
+cmd_gallery_install() {
+    local name="${1:-}" local_name=""
+    [[ -z "$name" ]] && die "Usage: shrutz gallery install <name> [--as <local-name>]"
+    shift
+    while (( $# > 0 )); do
+        case "$1" in
+            --as) local_name="${2:-}"; shift 2 ;;
+            *) die "Usage: shrutz gallery install <name> [--as <local-name>]" ;;
+        esac
+    done
+    local_name="${local_name:-$name}"
+
+    local dest="$WALLPAPER_BASE/$local_name"
+    [[ -e "$dest" ]] && die "set '$local_name' already exists — use --as <name> or 'shrutz set delete $local_name' first"
+
+    local manifest
+    manifest=$(_gallery_fetch_manifest) || \
+        die "could not reach the gallery manifest ($GALLERY_MANIFEST_URL) — check your network connection and try again"
+
+    local entry
+    entry=$(GALLERY_JSON="$manifest" GALLERY_NAME="$name" python3 << 'PYEOF'
+import json, os
+data = json.loads(os.environ['GALLERY_JSON'])
+name = os.environ['GALLERY_NAME']
+for s in data.get('sets', []):
+    if s.get('name') == name:
+        print(f"URL={s.get('download_url','')}")
+        print(f"SHA={s.get('sha256','')}")
+        break
+PYEOF
+    ) || die "gallery manifest could not be parsed"
+    [[ -z "$entry" ]] && die "no gallery entry named '$name' — run 'shrutz gallery list' to see available sets"
+
+    local url sha
+    url=$(echo "$entry" | grep '^URL=' | cut -d= -f2-)
+    sha=$(echo "$entry"  | grep '^SHA=' | cut -d= -f2-)
+    [[ -z "$url" ]] && die "gallery entry '$name' has no download URL yet"
+
+    local tmp_zip
+    tmp_zip=$(mktemp "${TMPDIR:-/tmp}/shrutz-gallery-XXXXXX.zip")
+    trap 'rm -f "$tmp_zip"' EXIT
+
+    echo "shrutz: downloading '$name'..."
+    http_get "$url" 30 > "$tmp_zip" || die "download failed for '$name' — check your network connection and try again"
+
+    if [[ -n "$sha" ]]; then
+        local actual
+        actual=$(shasum -a 256 "$tmp_zip" | awk '{print $1}')
+        [[ "$actual" == "$sha" ]] || die "checksum mismatch for '$name' — download may be corrupt, try again"
+    fi
+
+    mkdir -p "$dest"
+    if ! ZIP_PATH="$tmp_zip" ZIP_DEST_DIR="$dest" python3 << 'PYEOF'
+import os, sys, zipfile
+
+zip_path = os.environ['ZIP_PATH']
+dest_dir = os.environ['ZIP_DEST_DIR']
+
+try:
+    with zipfile.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        if not names:
+            print("error: zip is empty", file=sys.stderr)
+            sys.exit(1)
+
+        # Every member is expected to be prefixed with one top-level
+        # directory (the shape `shrutz export` produces) — strip that one
+        # leading component so contents land directly in dest_dir
+        # regardless of what the zip's internal folder was named.
+        def strip_top(member):
+            parts = member.split('/', 1)
+            return parts[1] if len(parts) == 2 else parts[0]
+
+        dest_real = os.path.realpath(dest_dir)
+
+        # Validate every path BEFORE extracting anything (mandatory
+        # zip-slip guard): reject any member whose resolved path escapes
+        # dest_dir.
+        for member in names:
+            if member.endswith('/'):
+                continue
+            rel = strip_top(member)
+            if not rel:
+                continue
+            target = os.path.realpath(os.path.join(dest_real, rel))
+            if os.path.commonpath([dest_real, target]) != dest_real:
+                print(f"error: unsafe path in zip: {member}", file=sys.stderr)
+                sys.exit(1)
+
+        for member in names:
+            if member.endswith('/'):
+                continue
+            rel = strip_top(member)
+            if not rel:
+                continue
+            target = os.path.join(dest_real, rel)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with zf.open(member) as src, open(target, 'wb') as out:
+                out.write(src.read())
+
+    print('ok')
+except Exception as e:
+    print(f'error: {e}', file=sys.stderr)
+    sys.exit(1)
+PYEOF
+    then
+        rm -rf "$dest"
+        die "failed to extract gallery zip for '$name' — it may be corrupt"
+    fi
+
+    rm -f "$tmp_zip"
+    trap - EXIT
+
+    # Preserve the shuffle flag from the extracted __init__ (if any), then
+    # restamp created=/images= exactly like a locally-created set — a
+    # gallery-installed set becomes indistinguishable from a hand-made one.
+    local shuffle_flag
+    shuffle_flag=$(init_field "$dest" "shuffle")
+    write_init "$dest" "$local_name"
+    [[ "$shuffle_flag" == "true" ]] && printf 'shuffle=true\n' >> "$dest/__init__"
+
+    local count
+    count=$(count_images "$dest")
+    echo "shrutz: installed '$local_name' ($count images) — switch to it with: shrutz switch $local_name"
+}
+
 # ── shrutz update ─────────────────────────────────────────────
 cmd_update() {
     load_state
@@ -1633,6 +1840,7 @@ case "${1:-daemon}" in
     history)      shift; cmd_history "$@" ;;
     dash)         cmd_dash ;;
     export)       shift; cmd_export "$@" ;;
+    gallery)      shift; cmd_gallery "$@" ;;
     update)       cmd_update ;;
     dieanddontcomeback) shift; cmd_dieanddontcomeback "$@" ;;
     -h|--help|help)
@@ -1667,6 +1875,12 @@ case "${1:-daemon}" in
         echo "  import <path>             import images into active set"
         echo "    --set <name>            import into a specific set instead"
         echo "  export <set> [dest]       zip a set for backup/sharing"
+        echo ""
+        echo "  Creators Publish"
+        echo "  ──────────────────────────────────────────────────"
+        echo "  gallery list                     browse developer-curated sets"
+        echo "  gallery install <name>           download and install one"
+        echo "    --as <local-name>              install it under a different name"
         echo ""
         echo "  Weather"
         echo "  ──────────────────────────────────────────────────"

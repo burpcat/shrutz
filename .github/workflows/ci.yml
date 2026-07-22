@@ -21,7 +21,7 @@ jobs:
         run: chmod +x shrutz install.sh
 
       - name: Run tests
-        run: bats shrutz.bats install.bats weather.bats
+        run: bats shrutz.bats install.bats weather.bats gallery.bats
 
   merge:
     name: Merge feat/adds → master
