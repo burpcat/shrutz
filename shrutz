@@ -18,14 +18,19 @@ LOG_FILE="$SHRUTZ_LIB/shrutz.log"
 WALLPAPER_STORE="$HOME/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
 SHRUTZ_BIN="$HOME/.local/bin/shrutz"
 LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/local.shrutz.plist"
+WEATHER_MAP_FILE="$SHRUTZ_LIB/weather_map"
 
 # ── Tunables ───────────────────────────────────────────────────
 ACTIVE_MINS=30        # minutes of real use before switching
 IDLE_THRESHOLD=60     # seconds without input → considered away
 CHECK_EVERY=30        # how often the loop wakes up (seconds)
+WEATHER_POLL_MINS=20  # how often to poll the weather API (minutes)
 
 # ── Derived ────────────────────────────────────────────────────
 ACTIVE_SECS_NEEDED=$(( ACTIVE_MINS * 60 ))
+
+# Canonical weather condition vocabulary — used to validate `weather map`.
+WEATHER_CONDITIONS=(clear cloudy fog rain snow storm night)
 
 # ══════════════════════════════════════════════════════════════════
 # SHARED UTILITIES
@@ -48,6 +53,14 @@ load_state() {
     PAUSED=0
     PLAY_ORDER=""        # space-separated shuffle order; empty = sequential
     SHRUTZ_REPO=""       # path to the git repo, set by installer
+    WEATHER_ENABLED=0
+    WEATHER_LAT=""
+    WEATHER_LON=""
+    WEATHER_LOCATION_LABEL=""
+    WEATHER_LAST_POLL=0
+    WEATHER_LAST_SET=""
+    WEATHER_LAST_CONDITION=""
+    WEATHER_LAST_TEMP_F=""
     [[ -f "$STATE_FILE" ]] && source "$STATE_FILE"
 }
 
@@ -55,6 +68,15 @@ save_state() {
     printf 'CURRENT_INDEX=%d\nACTIVE_SECONDS=%d\nACTIVE_SET=%s\nPAUSED=%d\nPLAY_ORDER=%s\nSHRUTZ_REPO=%s\n' \
         "$CURRENT_INDEX" "$ACTIVE_SECONDS" "$ACTIVE_SET" "$PAUSED" \
         "$PLAY_ORDER" "$SHRUTZ_REPO" > "$STATE_FILE"
+    # WEATHER_LOCATION_LABEL and WEATHER_LAST_SET are free-form strings that
+    # can contain spaces/commas — %q-quote them so `source` reloads them
+    # correctly (unquoted multi-word values break the plain fields above too,
+    # a pre-existing issue not fixed here; these two are new, so they don't
+    # repeat it).
+    printf 'WEATHER_ENABLED=%d\nWEATHER_LAT=%s\nWEATHER_LON=%s\nWEATHER_LOCATION_LABEL=%q\nWEATHER_LAST_POLL=%d\nWEATHER_LAST_SET=%q\nWEATHER_LAST_CONDITION=%s\nWEATHER_LAST_TEMP_F=%s\n' \
+        "$WEATHER_ENABLED" "$WEATHER_LAT" "$WEATHER_LON" "$WEATHER_LOCATION_LABEL" \
+        "$WEATHER_LAST_POLL" "$WEATHER_LAST_SET" "$WEATHER_LAST_CONDITION" "$WEATHER_LAST_TEMP_F" \
+        >> "$STATE_FILE"
 }
 
 # Resolve the active wallpaper directory from state.
@@ -129,6 +151,76 @@ restart_daemon() {
         kill "$pid" 2>/dev/null || true
     fi
     return 0
+}
+
+# http_get <url> [timeout_seconds]
+#
+# Generic HTTP(S) GET — the only place shrutz touches the network. Not
+# weather-specific; the gallery feature reuses this exact function for
+# downloading zips (with a longer timeout, redirected to a file).
+#
+# Stdout: the raw response body on success. Binary-safe ONLY if redirected
+# to a file (`http_get "$url" 30 > out.zip`) — capturing via `$()` strips
+# trailing newlines and can't hold embedded NULs, which is fine for
+# JSON/text but not for an arbitrary binary download.
+#
+# Exit code: 0 on an HTTP 2xx response, 1 on any failure (DNS/connect
+# error, timeout, non-2xx status).
+#
+# Test override: if $SHRUTZ_HTTP_GET_STUB is set to an executable path,
+# that's called instead of the network: "$SHRUTZ_HTTP_GET_STUB" "$url" "$timeout".
+http_get() {
+    local url="$1" timeout="${2:-10}"
+
+    if [[ -n "${SHRUTZ_HTTP_GET_STUB:-}" ]]; then
+        "$SHRUTZ_HTTP_GET_STUB" "$url" "$timeout"
+        return $?
+    fi
+
+    HTTP_GET_URL="$url" HTTP_GET_TIMEOUT="$timeout" python3 << 'PYEOF'
+import os, sys, urllib.request
+
+url = os.environ['HTTP_GET_URL']
+timeout = float(os.environ['HTTP_GET_TIMEOUT'])
+try:
+    req = urllib.request.Request(url, headers={'User-Agent': 'shrutz/1'})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        sys.stdout.buffer.write(resp.read())
+except Exception as e:
+    print(f"http_get: {e}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
+# ── Weather condition → set mapping (~/.local/lib/shrutz/weather_map) ──
+# Flat "condition=set-name" file, one mapping per line — the same
+# read/replace-one-key idiom already used on __init__ (grep to read,
+# grep -v + re-append to replace).
+weather_map_get() {
+    local condition="$1"
+    [[ -f "$WEATHER_MAP_FILE" ]] && grep "^${condition}=" "$WEATHER_MAP_FILE" | cut -d= -f2- || echo ""
+}
+
+weather_map_set() {
+    local condition="$1" set_name="$2"
+    touch "$WEATHER_MAP_FILE"
+    if grep -q "^${condition}=" "$WEATHER_MAP_FILE"; then
+        local tmp; tmp=$(grep -v "^${condition}=" "$WEATHER_MAP_FILE")
+        printf '%s\n%s=%s\n' "$tmp" "$condition" "$set_name" > "$WEATHER_MAP_FILE"
+    else
+        printf '%s=%s\n' "$condition" "$set_name" >> "$WEATHER_MAP_FILE"
+    fi
+}
+
+weather_map_remove() {
+    local condition="$1"
+    [[ -f "$WEATHER_MAP_FILE" ]] || return 0
+    local tmp; tmp=$(grep -v "^${condition}=" "$WEATHER_MAP_FILE")
+    printf '%s\n' "$tmp" > "$WEATHER_MAP_FILE"
+}
+
+weather_map_list() {
+    [[ -f "$WEATHER_MAP_FILE" ]] && cat "$WEATHER_MAP_FILE"
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -234,42 +326,232 @@ apply_all_spaces() {
 }
 
 # ══════════════════════════════════════════════════════════════════
+# WEATHER
+# ══════════════════════════════════════════════════════════════════
+
+# weather_bucket <wmo_code> [is_day]
+#
+# Maps an Open-Meteo weather_code to one of the WEATHER_CONDITIONS buckets.
+# Returns "" for unrecognised codes (safe no-op upstream). The night
+# override only applies to clear/cloudy — severe weather (rain/snow/storm/
+# fog) stays as-is regardless of time of day, since a storm is more
+# salient than day/night and users are unlikely to want it silently
+# remapped to a generic starry-night set.
+weather_bucket() {
+    local code="$1" is_day="${2:-1}" bucket
+    case "$code" in
+        0)                                      bucket="clear"  ;;
+        1|2|3)                                   bucket="cloudy" ;;
+        45|48)                                   bucket="fog"    ;;
+        51|53|55|56|57|61|63|65|66|67|80|81|82)  bucket="rain"   ;;
+        71|73|75|77|85|86)                       bucket="snow"   ;;
+        95|96|99)                                bucket="storm"  ;;
+        *)                                        bucket=""      ;;
+    esac
+    if [[ "$is_day" == "0" ]] && [[ "$bucket" == "clear" || "$bucket" == "cloudy" ]]; then
+        bucket="night"
+    fi
+    echo "$bucket"
+}
+
+# Fetch current weather for a lat/lon. Prints "CODE=<n>\nISDAY=<0|1>\nTEMPF=<n>"
+# on success; returns 1 on any fetch/parse failure.
+_weather_fetch() {
+    local lat="$1" lon="$2"
+    local url="https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=weather_code,is_day,temperature_2m&temperature_unit=fahrenheit"
+    local body; body=$(http_get "$url") || return 1
+    WEATHER_JSON="$body" python3 << 'PYEOF'
+import json, os, sys
+try:
+    data = json.loads(os.environ['WEATHER_JSON'])
+    current = data['current']
+    print(f"CODE={int(current['weather_code'])}")
+    print(f"ISDAY={int(current['is_day'])}")
+    print(f"TEMPF={current['temperature_2m']}")
+except Exception as e:
+    print(f"error: {e}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
+_urlencode() {
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"
+}
+
+# Resolve a city name to coordinates. Prints "LAT=<f>\nLON=<f>\nLABEL=<name>"
+# on success; returns 1 if nothing matched or the request failed.
+_weather_geocode() {
+    local query="$1"
+    local url="https://geocoding-api.open-meteo.com/v1/search?name=$(_urlencode "$query")&count=1&language=en&format=json"
+    local body; body=$(http_get "$url") || return 1
+    WEATHER_JSON="$body" python3 << 'PYEOF'
+import json, os, sys
+try:
+    data = json.loads(os.environ['WEATHER_JSON'])
+    results = data.get('results') or []
+    if not results:
+        print("error: no match", file=sys.stderr)
+        sys.exit(1)
+    r = results[0]
+    label = ', '.join(p for p in (r.get('name'), r.get('admin1'), r.get('country')) if p)
+    print(f"LAT={r['latitude']}")
+    print(f"LON={r['longitude']}")
+    print(f"LABEL={label}")
+except Exception as e:
+    print(f"error: {e}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
+# _weather_decide <lat> <lon>
+#
+# Prints "BUCKET=...\nTARGET=...\nTEMPF=..." — BUCKET/TARGET may be empty,
+# that's a legitimate "no-op" outcome, not a failure. Returns 1 only on
+# fetch/parse failure (network down, malformed response, etc).
+_weather_decide() {
+    local lat="$1" lon="$2" resp code is_day tempf bucket target
+    resp=$(_weather_fetch "$lat" "$lon") || return 1
+    code=$(echo "$resp"   | grep '^CODE='  | cut -d= -f2)
+    is_day=$(echo "$resp" | grep '^ISDAY=' | cut -d= -f2)
+    tempf=$(echo "$resp"  | grep '^TEMPF=' | cut -d= -f2)
+    [[ -z "$code" ]] && return 1
+    bucket=$(weather_bucket "$code" "$is_day")
+    target=""
+    [[ -n "$bucket" ]] && target=$(weather_map_get "$bucket")
+    printf 'BUCKET=%s\nTARGET=%s\nTEMPF=%s\n' "$bucket" "$target" "$tempf"
+}
+
+# ══════════════════════════════════════════════════════════════════
 # DAEMON — main loop
 # ══════════════════════════════════════════════════════════════════
 
-run_daemon() {
-    load_state
+# _activate_set <name> [mode]
+#
+# Rebuild WALLPAPERS/TOTAL/shuffle state for wallpaper set <name> and apply
+# the resulting wallpaper — the one shared "switch to a set, in-process"
+# primitive. Used at daemon startup (mode=resume: keep CURRENT_INDEX/
+# PLAY_ORDER if still valid — the same resume/regenerate logic the
+# original startup code always ran) and by the weather auto-switch path
+# (mode=switch, the default: always start at image 0, like a manual
+# `shrutz switch`). Deliberately does NOT call restart_daemon() — unlike
+# the CLI's cmd_switch, this runs inside the daemon's own process, so
+# there's nothing to restart.
+#
+# Returns 1 (touches nothing) if <name>'s directory is missing or empty —
+# callers decide what that means (fatal at daemon startup; "skip this
+# poll, keep the current set" for weather).
+_activate_set() {
+    local name="$1" mode="${2:-switch}"
+    local dir="$WALLPAPER_BASE/$name"
 
-    WALLPAPER_DIR="$WALLPAPER_BASE/$ACTIVE_SET"
-
-    # Build wallpaper list (always sorted — shuffle reorders via PLAY_ORDER)
-    WALLPAPERS=()
+    local new_wallpapers=()
     while IFS= read -r -d '' f; do
-        WALLPAPERS+=("$f")
-    done < <(find "$WALLPAPER_DIR" -maxdepth 1 \
+        new_wallpapers+=("$f")
+    done < <(find "$dir" -maxdepth 1 \
         \( -iname "*.jpg"  -o -iname "*.jpeg" \
         -o -iname "*.png"  -o -iname "*.heic" \
         -o -iname "*.webp" \) \
-        -print0 | sort -z)
+        -print0 2>/dev/null | sort -z)
 
-    TOTAL=${#WALLPAPERS[@]}
-    if (( TOTAL == 0 )); then
-        log "ERROR: no images found in $WALLPAPER_DIR — exiting"
-        exit 1
-    fi
+    local new_total=${#new_wallpapers[@]}
+    (( new_total == 0 )) && return 1
 
-    (( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
-
-    # ── Shuffle setup ──────────────────────────────────────────
-    # If the active set has shuffle=true in __init__, we maintain
-    # a PLAY_ORDER array — a permutation of 0..TOTAL-1 indices.
-    # CURRENT_INDEX then points into PLAY_ORDER, not directly into WALLPAPERS.
-    # On exhaustion we reshuffle. Sequential sets leave PLAY_ORDER empty.
+    ACTIVE_SET="$name"
+    WALLPAPER_DIR="$dir"
+    WALLPAPERS=("${new_wallpapers[@]}")
+    TOTAL=$new_total
 
     SHUFFLE_MODE=0
     local set_shuffle
     set_shuffle=$(init_field "$WALLPAPER_DIR" "shuffle")
     [[ "$set_shuffle" == "true" ]] && SHUFFLE_MODE=1
+
+    if [[ "$mode" == "resume" ]]; then
+        (( CURRENT_INDEX >= TOTAL )) && CURRENT_INDEX=0
+        local order_count=0
+        [[ -n "$PLAY_ORDER" ]] && order_count=$(echo "$PLAY_ORDER" | wc -w | tr -d ' ')
+        if (( SHUFFLE_MODE == 1 )) && { [[ -z "$PLAY_ORDER" ]] || (( order_count != TOTAL )); }; then
+            _build_play_order
+            CURRENT_INDEX=0
+        fi
+    else
+        CURRENT_INDEX=0
+        PLAY_ORDER=""
+        (( SHUFFLE_MODE == 1 )) && _build_play_order
+    fi
+
+    local wp; wp=$(_resolve_wallpaper)
+    apply_all_spaces "$wp"
+    return 0
+}
+
+# _weather_maybe_check — called once per daemon tick (~every CHECK_EVERY
+# seconds), independent of idle/active-time tracking. Cadence is its own
+# persisted WEATHER_LAST_POLL vs wall-clock comparison. Never exits/dies —
+# every failure path just logs and returns, the daemon must never crash
+# over a network hiccup.
+_weather_maybe_check() {
+    (( PAUSED == 1 )) && return 0             # pause means "freeze all auto-rotation"
+    (( WEATHER_ENABLED == 1 )) || return 0
+    [[ -n "$WEATHER_LAT" && -n "$WEATHER_LON" ]] || return 0
+
+    local now due_at
+    now=$(date +%s)
+    due_at=$(( WEATHER_LAST_POLL + WEATHER_POLL_MINS * 60 ))
+    (( now < due_at )) && return 0
+    WEATHER_LAST_POLL=$now   # mark attempted regardless of outcome — avoids retry storms on outage
+
+    local decision
+    if ! decision=$(_weather_decide "$WEATHER_LAT" "$WEATHER_LON"); then
+        log "weather: fetch failed — will retry in ~${WEATHER_POLL_MINS}m"
+        return 0
+    fi
+
+    local bucket target tempf
+    bucket=$(echo "$decision" | grep '^BUCKET=' | cut -d= -f2-)
+    target=$(echo "$decision" | grep '^TARGET='  | cut -d= -f2-)
+    tempf=$(echo "$decision"  | grep '^TEMPF='   | cut -d= -f2-)
+    WEATHER_LAST_CONDITION="$bucket"
+    [[ -n "$tempf" ]] && WEATHER_LAST_TEMP_F="$tempf"
+
+    if [[ -z "$bucket" ]]; then
+        log "weather: unrecognised condition code — skipping"
+        return 0
+    fi
+    if [[ -z "$target" ]]; then
+        log "weather: '$bucket' has no mapped set — skipping"
+        return 0
+    fi
+    # Anti-thrash: only act when the weather-mapped target differs from
+    # the set weather itself last chose — not from whatever is currently
+    # active. This lets a manual `shrutz switch` to something unrelated
+    # stand indefinitely as long as the underlying condition hasn't
+    # changed (next poll's target still equals WEATHER_LAST_SET, a
+    # no-op); once the condition genuinely changes, weather reasserts
+    # control. cmd_switch deliberately never touches WEATHER_LAST_SET.
+    if [[ "$target" == "$WEATHER_LAST_SET" ]]; then
+        return 0
+    fi
+
+    if [[ ! -d "$WALLPAPER_BASE/$target" ]] || (( $(count_images "$WALLPAPER_BASE/$target") == 0 )); then
+        log "weather: mapped set '$target' for '$bucket' is missing or empty — skipping"
+        return 0
+    fi
+    if [[ "$ACTIVE_SET" == "$target" ]]; then
+        WEATHER_LAST_SET="$target"   # already there (e.g. user switched here manually) — adopt silently
+        return 0
+    fi
+
+    if _activate_set "$target"; then
+        WEATHER_LAST_SET="$target"
+        log "weather: '$bucket' → switched to set '$target' ([$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$(_resolve_wallpaper)"))"
+    else
+        log "weather: mapped set '$target' failed to activate — skipping"
+    fi
+}
+
+run_daemon() {
+    load_state
 
     # Rebuild or validate PLAY_ORDER
     _build_play_order() {
@@ -282,16 +564,6 @@ print(' '.join(map(str, order)))
 " "$TOTAL")
         log "shuffle: new play order generated for $TOTAL images"
     }
-
-    if (( SHUFFLE_MODE == 1 )); then
-        local order_count
-        order_count=$(echo "$PLAY_ORDER" | wc -w | tr -d ' ')
-        # Regenerate if empty or stale (different total than current)
-        if [[ -z "$PLAY_ORDER" ]] || (( order_count != TOTAL )); then
-            _build_play_order
-            CURRENT_INDEX=0
-        fi
-    fi
 
     # Resolve the actual wallpaper path from index (shuffle-aware)
     _resolve_wallpaper() {
@@ -314,6 +586,15 @@ print(' '.join(map(str, order)))
     _retreat_index() {
         (( CURRENT_INDEX = (CURRENT_INDEX - 1 + TOTAL) % TOTAL ))
     }
+
+    # Build WALLPAPERS/TOTAL/shuffle state for ACTIVE_SET, resuming
+    # CURRENT_INDEX/PLAY_ORDER if still valid — the same logic that used
+    # to be inlined here directly, now shared with the weather auto-switch
+    # path via _activate_set() (defined above, near apply_all_spaces()).
+    if ! _activate_set "$ACTIVE_SET" resume; then
+        log "ERROR: no images found in $WALLPAPER_BASE/$ACTIVE_SET — exiting"
+        exit 1
+    fi
 
     # ── Signal handlers ────────────────────────────────────────
     trap '_sig_next' USR1
@@ -355,10 +636,7 @@ print(' '.join(map(str, order)))
     (( SHUFFLE_MODE == 1 )) && shuffle_label=" [shuffle]"
     log "shrutz started — set='$ACTIVE_SET'${shuffle_label} $TOTAL wallpapers, rotate every ${ACTIVE_MINS}m active use"
     [[ "$PAUSED" == "1" ]] && log "note: starting in paused state"
-
-    local current_wp; current_wp=$(_resolve_wallpaper)
-    apply_all_spaces "$current_wp"
-    log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$current_wp")"
+    log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$(_resolve_wallpaper)")"
 
     while true; do
         # Backgrounded + waited (not a plain foreground `sleep`) so that
@@ -391,6 +669,8 @@ print(' '.join(map(str, order)))
                 fi
             fi
         fi
+
+        _weather_maybe_check
 
         save_state
     done
@@ -697,15 +977,16 @@ cmd_config() {
         echo ""
         echo "  Tunables (edit with: shrutz config <key> <value>)"
         echo ""
-        grep -E '^(ACTIVE_MINS|IDLE_THRESHOLD|CHECK_EVERY)=' "$script" | \
+        grep -E '^(ACTIVE_MINS|IDLE_THRESHOLD|CHECK_EVERY|WEATHER_POLL_MINS)=' "$script" | \
         while IFS='=' read -r k v; do
             # Strip inline comment
             v="${v%%#*}"
             v="${v%"${v##*[![:space:]]}"}"  # rtrim
             case "$k" in
-                ACTIVE_MINS)     printf '  %-20s = %s  (minutes active before switching)\n' "$k" "$v" ;;
-                IDLE_THRESHOLD)  printf '  %-20s = %s  (seconds idle before pausing timer)\n' "$k" "$v" ;;
-                CHECK_EVERY)     printf '  %-20s = %s  (poll interval in seconds)\n' "$k" "$v" ;;
+                ACTIVE_MINS)        printf '  %-20s = %s  (minutes active before switching)\n' "$k" "$v" ;;
+                IDLE_THRESHOLD)     printf '  %-20s = %s  (seconds idle before pausing timer)\n' "$k" "$v" ;;
+                CHECK_EVERY)        printf '  %-20s = %s  (poll interval in seconds)\n' "$k" "$v" ;;
+                WEATHER_POLL_MINS)  printf '  %-20s = %s  (minutes between weather checks)\n' "$k" "$v" ;;
             esac
         done
         echo ""
@@ -714,8 +995,8 @@ cmd_config() {
 
     # Validate key
     case "$key" in
-        ACTIVE_MINS|IDLE_THRESHOLD|CHECK_EVERY) ;;
-        *) die "unknown config key '$key' — valid keys: ACTIVE_MINS, IDLE_THRESHOLD, CHECK_EVERY" ;;
+        ACTIVE_MINS|IDLE_THRESHOLD|CHECK_EVERY|WEATHER_POLL_MINS) ;;
+        *) die "unknown config key '$key' — valid keys: ACTIVE_MINS, IDLE_THRESHOLD, CHECK_EVERY, WEATHER_POLL_MINS" ;;
     esac
 
     [[ -z "$val" ]] && die "Usage: shrutz config <key> <value>"
@@ -728,6 +1009,246 @@ cmd_config() {
     # Restart daemon so it picks up new tunables
     restart_daemon
     echo "shrutz: daemon restarted"
+}
+
+# ── shrutz weather ─────────────────────────────────────────────
+cmd_weather() {
+    local subcmd="${1:-status}"
+    (( $# > 0 )) && shift
+
+    case "$subcmd" in
+        status)   cmd_weather_status "$@" ;;
+        --json)   cmd_weather_status --json ;;
+        on)       cmd_weather_on ;;
+        off)      cmd_weather_off ;;
+        location) cmd_weather_location "$@" ;;
+        map)      cmd_weather_map "$@" ;;
+        unmap)    cmd_weather_unmap "$@" ;;
+        check)    cmd_weather_check ;;
+        *) die "Usage: shrutz weather <status|on|off|location|map|unmap|check> [args]" ;;
+    esac
+}
+
+cmd_weather_status() {
+    load_state
+
+    if [[ "${1:-}" == "--json" ]]; then
+        local enabled="false"
+        (( WEATHER_ENABLED == 1 )) && enabled="true"
+        local last_checked=""
+        [[ "$WEATHER_LAST_POLL" != "0" ]] && \
+            last_checked=$(date -r "$WEATHER_LAST_POLL" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "")
+
+        WJ_ENABLED="$enabled" WJ_LOCATION="$WEATHER_LOCATION_LABEL" WJ_CONDITION="$WEATHER_LAST_CONDITION" \
+        WJ_TEMPF="$WEATHER_LAST_TEMP_F" WJ_CHECKED="$last_checked" python3 << 'PYEOF'
+import json, os
+
+def as_bool(v): return v == "true"
+def as_num(v):
+    try:
+        return float(v)
+    except Exception:
+        return None
+
+enabled = as_bool(os.environ['WJ_ENABLED'])
+print(json.dumps({
+    "enabled": enabled,
+    "location": os.environ['WJ_LOCATION'],
+    "condition": os.environ['WJ_CONDITION'],
+    "temperature_f": as_num(os.environ['WJ_TEMPF']),
+    "auto_switch": enabled,
+    "last_checked": os.environ['WJ_CHECKED'],
+}))
+PYEOF
+        return
+    fi
+
+    echo ""
+    if (( WEATHER_ENABLED == 1 )); then
+        echo "  Auto-switching : on"
+    else
+        echo "  Auto-switching : off"
+    fi
+    if [[ -n "$WEATHER_LOCATION_LABEL" ]]; then
+        echo "  Location       : $WEATHER_LOCATION_LABEL ($WEATHER_LAT, $WEATHER_LON)"
+    else
+        echo "  Location       : (not set — shrutz weather location <city|lat,lon>)"
+    fi
+    echo "  Poll interval  : ${WEATHER_POLL_MINS}m"
+    if [[ -n "$WEATHER_LAST_CONDITION" ]]; then
+        local temp_label=""
+        [[ -n "$WEATHER_LAST_TEMP_F" ]] && temp_label=", ${WEATHER_LAST_TEMP_F}°F"
+        echo "  Last condition : $WEATHER_LAST_CONDITION${temp_label}"
+    else
+        echo "  Last condition : (none yet)"
+    fi
+    [[ -n "$WEATHER_LAST_SET" ]] && echo "  Last weather set: $WEATHER_LAST_SET"
+    echo ""
+    echo "  Mappings"
+    echo "  ──────────────────────────────────────────────────"
+    if [[ -f "$WEATHER_MAP_FILE" && -s "$WEATHER_MAP_FILE" ]]; then
+        while IFS='=' read -r cond setname; do
+            [[ -z "$cond" ]] && continue
+            printf '  %-10s → %s\n' "$cond" "$setname"
+        done < "$WEATHER_MAP_FILE"
+    else
+        echo "  (none configured — shrutz weather map <condition> <set>)"
+    fi
+    echo ""
+    echo "  Conditions: ${WEATHER_CONDITIONS[*]}"
+    echo ""
+}
+
+cmd_weather_on() {
+    load_state
+    [[ -n "$WEATHER_LAT" && -n "$WEATHER_LON" ]] || die "no location set — run: shrutz weather location <city|lat,lon>"
+    WEATHER_ENABLED=1
+    save_state
+    restart_daemon
+    if [[ ! -f "$WEATHER_MAP_FILE" || ! -s "$WEATHER_MAP_FILE" ]]; then
+        echo "shrutz: weather auto-switching on (no mappings configured yet — shrutz weather map <condition> <set>)"
+    else
+        echo "shrutz: weather auto-switching on"
+    fi
+}
+
+cmd_weather_off() {
+    load_state
+    WEATHER_ENABLED=0
+    save_state
+    restart_daemon
+    echo "shrutz: weather auto-switching off"
+}
+
+cmd_weather_location() {
+    local raw="$*"
+    [[ -z "$raw" ]] && die "Usage: shrutz weather location <city name> | <lat,lon>"
+    load_state
+
+    if [[ "$raw" =~ ^-?[0-9]+(\.[0-9]+)?,-?[0-9]+(\.[0-9]+)?$ ]]; then
+        local lat="${raw%%,*}" lon="${raw##*,}"
+        WLAT="$lat" WLON="$lon" python3 -c "
+import os, sys
+lat, lon = float(os.environ['WLAT']), float(os.environ['WLON'])
+sys.exit(0 if (-90 <= lat <= 90 and -180 <= lon <= 180) else 1)
+" || die "latitude must be -90..90 and longitude -180..180"
+        WEATHER_LAT="$lat"
+        WEATHER_LON="$lon"
+        WEATHER_LOCATION_LABEL="custom ($lat, $lon)"
+        save_state
+        restart_daemon
+        echo "shrutz: location set to $lat, $lon"
+    else
+        echo "shrutz: looking up '$raw'..."
+        local result
+        result=$(_weather_geocode "$raw") || die "could not resolve '$raw' — check spelling/network and try again"
+        local lat lon label
+        lat=$(echo "$result"   | grep '^LAT='   | cut -d= -f2-)
+        lon=$(echo "$result"   | grep '^LON='   | cut -d= -f2-)
+        label=$(echo "$result" | grep '^LABEL=' | cut -d= -f2-)
+        [[ -z "$lat" || -z "$lon" ]] && die "geocoding returned no result for '$raw'"
+        WEATHER_LAT="$lat"
+        WEATHER_LON="$lon"
+        WEATHER_LOCATION_LABEL="$label"
+        save_state
+        restart_daemon
+        echo "shrutz: location set to '$label' ($lat, $lon)"
+    fi
+}
+
+cmd_weather_map() {
+    local condition="${1:-}" set_name="${2:-}"
+
+    if [[ -z "$condition" && -z "$set_name" ]]; then
+        if [[ -f "$WEATHER_MAP_FILE" && -s "$WEATHER_MAP_FILE" ]]; then
+            echo ""
+            echo "  Weather mappings"
+            echo "  ──────────────────────────────────────────────────"
+            while IFS='=' read -r cond setname; do
+                [[ -z "$cond" ]] && continue
+                printf '  %-10s → %s\n' "$cond" "$setname"
+            done < "$WEATHER_MAP_FILE"
+            echo ""
+        else
+            echo "shrutz: no weather mappings configured"
+        fi
+        echo "  Conditions: ${WEATHER_CONDITIONS[*]}"
+        return
+    fi
+
+    [[ -z "$condition" || -z "$set_name" ]] && die "Usage: shrutz weather map <condition> <set>"
+
+    local valid=0 c
+    for c in "${WEATHER_CONDITIONS[@]}"; do [[ "$c" == "$condition" ]] && valid=1; done
+    (( valid == 1 )) || die "unknown condition '$condition' — valid: ${WEATHER_CONDITIONS[*]}"
+
+    assert_set_exists "$set_name"
+    weather_map_set "$condition" "$set_name"
+    echo "shrutz: weather condition '$condition' → set '$set_name'"
+    restart_daemon
+}
+
+cmd_weather_unmap() {
+    local condition="${1:-}"
+    [[ -z "$condition" ]] && die "Usage: shrutz weather unmap <condition>"
+    weather_map_remove "$condition"
+    echo "shrutz: removed mapping for '$condition'"
+    restart_daemon
+}
+
+cmd_weather_check() {
+    load_state
+    [[ "$WEATHER_ENABLED" == "1" ]] || die "weather auto-switching is off — enable with: shrutz weather on"
+    [[ -n "$WEATHER_LAT" && -n "$WEATHER_LON" ]] || die "no location set — run: shrutz weather location <city|lat,lon>"
+    echo "shrutz: checking weather for ${WEATHER_LOCATION_LABEL:-$WEATHER_LAT,$WEATHER_LON}..."
+
+    local decision
+    decision=$(_weather_decide "$WEATHER_LAT" "$WEATHER_LON") \
+        || die "weather fetch failed — check your network connection and try again"
+
+    local bucket target tempf
+    bucket=$(echo "$decision" | grep '^BUCKET=' | cut -d= -f2-)
+    target=$(echo "$decision" | grep '^TARGET=' | cut -d= -f2-)
+    tempf=$(echo "$decision"  | grep '^TEMPF='  | cut -d= -f2-)
+    WEATHER_LAST_CONDITION="$bucket"
+    [[ -n "$tempf" ]] && WEATHER_LAST_TEMP_F="$tempf"
+    WEATHER_LAST_POLL=$(date +%s)
+
+    if [[ -z "$bucket" ]]; then
+        save_state
+        echo "shrutz: unrecognised weather condition — no mapping to check"
+        return
+    fi
+    echo "shrutz: current condition: $bucket"
+
+    if [[ -z "$target" ]]; then
+        save_state
+        echo "shrutz: no set mapped to '$bucket' — staying on '$ACTIVE_SET' (map one with: shrutz weather map $bucket <set>)"
+        return
+    fi
+    if [[ ! -d "$WALLPAPER_BASE/$target" ]] || (( $(count_images "$WALLPAPER_BASE/$target") == 0 )); then
+        save_state
+        echo "shrutz: mapped set '$target' is missing or has no images — staying on '$ACTIVE_SET'"
+        return
+    fi
+    if [[ "$ACTIVE_SET" == "$target" ]]; then
+        WEATHER_LAST_SET="$target"
+        save_state
+        echo "shrutz: '$bucket' → '$target' is already the active set"
+        return
+    fi
+    if [[ "$target" == "$WEATHER_LAST_SET" ]]; then
+        echo "shrutz: '$bucket' → '$target' (unchanged since last weather switch — not re-triggering; use 'shrutz switch $target' to force it)"
+        save_state
+        return
+    fi
+
+    ACTIVE_SET="$target"
+    CURRENT_INDEX=0
+    WEATHER_LAST_SET="$target"
+    save_state
+    restart_daemon
+    echo "shrutz: '$bucket' → switched to set '$target'"
 }
 
 # ── shrutz stats ──────────────────────────────────────────────
@@ -1107,6 +1628,7 @@ case "${1:-daemon}" in
     resume)       cmd_resume ;;
     now)          cmd_now ;;
     config)       shift; cmd_config "$@" ;;
+    weather)      shift; cmd_weather "$@" ;;
     stats)        cmd_stats ;;
     history)      shift; cmd_history "$@" ;;
     dash)         cmd_dash ;;
@@ -1146,13 +1668,23 @@ case "${1:-daemon}" in
         echo "    --set <name>            import into a specific set instead"
         echo "  export <set> [dest]       zip a set for backup/sharing"
         echo ""
+        echo "  Weather"
+        echo "  ──────────────────────────────────────────────────"
+        echo "  weather                          show status, location, mappings"
+        echo "  weather on / off                 enable/disable auto-switching"
+        echo "  weather location <city|lat,lon>  set your location"
+        echo "  weather map <condition> <set>    map a condition to a set"
+        echo "  weather unmap <condition>        remove a condition mapping"
+        echo "  weather check                    force an immediate poll now"
+        echo "                                   conditions: ${WEATHER_CONDITIONS[*]}"
+        echo ""
         echo "  Info"
         echo "  ──────────────────────────────────────────────────"
         echo "  stats                     daemon uptime, switch count, totals"
         echo "  history [n]               last n wallpaper switches (default 10)"
         echo "  config                    show tunables"
         echo "  config <key> <val>        set a tunable and restart daemon"
-        echo "                            keys: ACTIVE_MINS IDLE_THRESHOLD CHECK_EVERY"
+        echo "                            keys: ACTIVE_MINS IDLE_THRESHOLD CHECK_EVERY WEATHER_POLL_MINS"
         echo ""
         echo "  Nuclear"
         echo "  ──────────────────────────────────────────────────"
