@@ -17,11 +17,11 @@ jobs:
       - name: Install bats-core
         run: brew install bats-core
 
-      - name: Make shrutz executable
-        run: chmod +x shrutz
+      - name: Make scripts executable
+        run: chmod +x shrutz install.sh
 
       - name: Run tests
-        run: bats shrutz.bats
+        run: bats shrutz.bats install.bats
 
   merge:
     name: Merge feat/adds → master

@@ -16,6 +16,8 @@ WALLPAPER_BASE="$SHRUTZ_LIB/wallpapers"
 STATE_FILE="$SHRUTZ_LIB/state"
 LOG_FILE="$SHRUTZ_LIB/shrutz.log"
 WALLPAPER_STORE="$HOME/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
+SHRUTZ_BIN="$HOME/.local/bin/shrutz"
+LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/local.shrutz.plist"
 
 # ── Tunables ───────────────────────────────────────────────────
 ACTIVE_MINS=30        # minutes of real use before switching
@@ -116,7 +118,7 @@ refresh_init_count() {
 # without the anchor it also matches any CLI subcommand currently running
 # (e.g. "shrutz next" itself), since its argv contains the same path prefix.
 daemon_pid() {
-    pgrep -f "$HOME/.local/bin/shrutz\$" 2>/dev/null | head -1
+    pgrep -f "${SHRUTZ_BIN}\$" 2>/dev/null | head -1
 }
 
 # Signal the daemon to restart via launchd (SIGTERM → launchd restarts it).
@@ -407,11 +409,11 @@ cmd_log() {
 }
 
 cmd_start() {
-    launchctl load "$HOME/Library/LaunchAgents/local.shrutz.plist"
+    launchctl load "$LAUNCHAGENT_PLIST"
 }
 
 cmd_stop() {
-    launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist"
+    launchctl unload "$LAUNCHAGENT_PLIST"
 }
 
 # ── shrutz sets ────────────────────────────────────────────────
@@ -687,7 +689,7 @@ cmd_now() {
 
 # ── shrutz config ─────────────────────────────────────────────
 cmd_config() {
-    local script="$HOME/.local/bin/shrutz"
+    local script="$SHRUTZ_BIN"
     local key="${1:-}" val="${2:-}"
 
     if [[ -z "$key" ]]; then
@@ -1044,9 +1046,9 @@ cmd_dieanddontcomeback() {
         [[ "$answer_lower" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
 
         # Stop the daemon first so launchd doesn't restart a ghost
-        launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist" 2>/dev/null || true
+        launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null || true
 
-        rm -f "$HOME/.local/bin/shrutz"
+        rm -f "$SHRUTZ_BIN"
         echo "shrutz: binary removed. your wallpapers and sets are untouched."
         echo "shrutz: to finish the job: shrutz dieanddontcomeback --ever"
         echo "shrutz: (you'll need to run that from the repo directly now)"
@@ -1059,11 +1061,11 @@ cmd_dieanddontcomeback() {
         [[ "$answer_lower" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
 
         echo "shrutz: stopping daemon..."
-        launchctl unload "$HOME/Library/LaunchAgents/local.shrutz.plist" 2>/dev/null || true
+        launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null || true
 
         echo "shrutz: removing files..."
-        rm -f  "$HOME/.local/bin/shrutz"
-        rm -f  "$HOME/Library/LaunchAgents/local.shrutz.plist"
+        rm -f  "$SHRUTZ_BIN"
+        rm -f  "$LAUNCHAGENT_PLIST"
         rm -f  "$HOME/.local/etc/launchd/local.shrutz.plist"
         rm -f  "$HOME/.local/share/man/man1/shrutz.1"
         rm -rf "$HOME/.local/lib/shrutz"
