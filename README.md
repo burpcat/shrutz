@@ -10,6 +10,22 @@ Wallpapers are applied across every Mission Control Space simultaneously, not ju
 
 ---
 
+**Contents:** [What's new](#whats-new-in-v21) · [How it works](#how-it-works) · [Requirements](#requirements) · [Installation](#installation) · [Usage](#usage) · [File layout](#file-layout) · [Configuration](#configuration) · [Weather](#weather) · [Creators Publish](#creators-publish) · [Menu Bar App](#menu-bar-app) · [Internals](#internals) · [Uninstall](#uninstall) · [Changelog](#changelog) · [License](#license)
+
+---
+
+## What's new in v2.1
+
+**Weather-based auto-switching.** Set your location once and map weather conditions to your own wallpaper sets — shrutz polls the free, no-API-key [Open-Meteo](https://open-meteo.com) service and switches automatically when the weather changes. See [Weather](#weather).
+
+**Creators Publish gallery.** shrutz ships with no bundled wallpapers now — instead, browse and download developer-curated sets (including the original `haasan` set) with `shrutz gallery list` / `shrutz gallery install`. See [Creators Publish](#creators-publish).
+
+**A friendlier install.** The installer now asks you to name your own first wallpaper set instead of force-seeding a fixed default — see [Installation](#installation).
+
+**A menu bar companion app.** shrutz stays terminal-first, but `shrutz menubar install` builds and installs an optional native menu bar app for people who'd rather not use the CLI. See [Menu Bar App](#menu-bar-app).
+
+**`--json` output.** `now`, `sets`, `status`, `stats`, `config`, and `weather` all support a `--json` flag for scripting or the menu bar app to consume.
+
 ## What's new in v2
 
 shrutz is now a full binary CLI. No shell function injection — every command runs directly from `~/.local/bin/shrutz` on your `$PATH`. The wallpaper directory is now organised into named **sets**, giving you multiple curated pools to switch between instantly.
@@ -37,7 +53,9 @@ State (current wallpaper index, accumulated active time, active set, shuffle ord
 - macOS 14 Sonoma or later
 - bash (ships with macOS)
 - python3 (ships with macOS)
-- No third-party dependencies
+- No third-party software dependencies
+
+The weather and Creators Publish features are entirely opt-in and only reach the network when actually used — `api.open-meteo.com` / `geocoding-api.open-meteo.com` for weather, `raw.githubusercontent.com` / `github.com` for the gallery. Building the menu bar companion app additionally requires Xcode.
 
 ---
 
@@ -55,14 +73,17 @@ chmod +x shrutz install.sh
 The installer will:
 
 1. Create the `~/.local` directory layout
-2. Prompt for a folder of wallpapers to import into the `default` set
+2. On a fresh install (not a repair/reinstall), prompt you to name your first wallpaper set — this becomes your active set — and optionally import a folder of images into it
 3. Install the binary to `~/.local/bin/shrutz`
-4. Register a `launchd` agent that starts automatically at login
+4. Register a `launchd` agent that starts automatically at login (skipped until your active set actually has images, so it never starts in an empty-set crash loop)
 5. Add `~/.local/bin` to your `PATH` and register the man page
 
-The wallpaper prompt looks like this:
+The first-run prompt looks like this:
 
 ```
+  Name your first wallpaper set (this becomes your active set).
+  Set name (or Enter for 'main'): vacation
+
   Where are your wallpapers?
   Enter a folder path to import now, or press Enter to skip.
 
@@ -70,7 +91,11 @@ The wallpaper prompt looks like this:
   ✓  42 images imported, 0 skipped
 ```
 
-Press Enter to skip and add images later with `shrutz import`. Supported formats: `.jpg`, `.jpeg`, `.png`, `.heic`, `.webp`
+Press Enter to accept the default name (`main`) or skip the import — add images later with `shrutz import`. Supported formats: `.jpg`, `.jpeg`, `.png`, `.heic`, `.webp`
+
+shrutz ships with no bundled wallpapers. Once installed, browse developer-curated sets — including the original `haasan` set — with `shrutz gallery list` (see [Creators Publish](#creators-publish)).
+
+Re-running `install.sh` on an existing install (repairs, `shrutz update`) skips this prompt entirely — it only ever runs once, on a genuinely fresh install.
 
 After installation reload your shell:
 
@@ -88,6 +113,7 @@ shrutz status               # check if the daemon is running
 shrutz log                  # stream the live activity log
 shrutz start                # start the daemon
 shrutz stop                 # stop the daemon
+shrutz --version            # print the installed version
 
 # Playback
 shrutz now                  # current wallpaper, set, timer state
@@ -109,12 +135,29 @@ shrutz import ~/path/to/images/          # import into active set
 shrutz import ~/path/ --set dark         # import into a specific set
 shrutz export dark                       # zip a set to ~/Desktop
 
+# Creators Publish (gallery)
+shrutz gallery list                     # browse developer-curated sets
+shrutz gallery install haasan           # download and install one
+
+# Weather
+shrutz weather                          # status, location, mappings
+shrutz weather location "Boston"        # set your location (city name or lat,lon)
+shrutz weather map rain rainy-set       # switch to 'rainy-set' when it's raining
+shrutz weather on                       # enable auto-switching
+shrutz weather check                    # force an immediate check
+
+# Menu bar app
+shrutz menubar install                  # build + install the optional GUI companion
+
 # Info & config
 shrutz stats                            # uptime, switches, totals
 shrutz history 20                       # last 20 wallpaper switches
 shrutz config                           # show tunables
 shrutz config ACTIVE_MINS 45            # change a tunable live
 shrutz update                           # pull latest and reinstall
+
+# Any of now/sets/status/stats/config/weather also take --json
+shrutz now --json
 ```
 
 A man page is installed at `~/.local/share/man/man1/shrutz.1`. Run `man shrutz` for the full reference.
@@ -132,11 +175,13 @@ shrutz follows the [XDG Base Directory](https://specifications.freedesktop.org/b
 ├── lib/
 │   └── shrutz/
 │       ├── wallpapers/
-│       │   ├── default/                          default wallpaper set
+│       │   ├── <your-first-set>/                 named at install time
 │       │   │   ├── __init__                      set metadata
 │       │   │   └── *.png / *.jpg / …             your images
 │       │   └── <other-sets>/                     additional sets
 │       ├── state                                 persisted runtime state
+│       ├── weather_map                           condition → set mappings
+│       ├── VERSION                                installed version
 │       ├── shrutz.log                            activity log
 │       └── shrutz.err                            stderr / crash output
 ├── etc/
@@ -149,6 +194,9 @@ shrutz follows the [XDG Base Directory](https://specifications.freedesktop.org/b
 
 ~/Library/LaunchAgents/
 └── local.shrutz.plist                            → symlink to ~/.local/etc/launchd/
+
+~/Applications/
+└── ShrutzMenuBar.app                             optional, via `shrutz menubar install`
 ```
 
 Each set folder contains a `__init__` metadata file:
@@ -170,9 +218,56 @@ Tunables live at the top of `~/.local/bin/shrutz` and can be edited in-place fro
 shrutz config ACTIVE_MINS 45       # switch every 45 minutes of active use
 shrutz config IDLE_THRESHOLD 120   # consider away after 2 minutes idle
 shrutz config CHECK_EVERY 60       # poll every 60 seconds instead of 30
+shrutz config WEATHER_POLL_MINS 30 # check the weather every 30 minutes instead of 20
 ```
 
 Each `config` call patches the script in-place and restarts the daemon immediately.
+
+---
+
+## Weather
+
+Set a location once, map weather conditions to your own wallpaper sets, and shrutz switches automatically when the weather changes — polled on its own schedule, independent of the active-time timer.
+
+```bash
+shrutz weather location "San Francisco"   # or a lat,lon pair: "37.77,-122.42"
+shrutz weather map rain rainy-day-set
+shrutz weather map snow winter-set
+shrutz weather map night dark-mode-set
+shrutz weather on
+```
+
+Valid conditions: `clear`, `cloudy`, `fog`, `rain`, `snow`, `storm`, `night`. Not every condition needs a mapping — unmapped conditions are simply no-ops. `night` only overrides `clear`/`cloudy` after dark; severe weather (rain/snow/storm/fog) is shown regardless of time of day.
+
+Weather data and city-name geocoding come from the free [Open-Meteo](https://open-meteo.com) API — no signup, no API key. A manual `shrutz switch` to an unrelated set is respected until the underlying weather condition actually changes to a different mapped target, so weather won't fight you over a switch you made yourself.
+
+Run `shrutz weather check` anytime to force an immediate check without waiting for the next scheduled poll, or `shrutz weather` to see the current status.
+
+---
+
+## Creators Publish
+
+shrutz ships with no bundled wallpapers. Instead, browse and download wallpaper sets published by the developer — hosted as a small JSON manifest on GitHub — and optionally install any of them locally:
+
+```bash
+shrutz gallery list              # browse available sets
+shrutz gallery install haasan    # download and install one
+shrutz gallery install haasan --as my-haasan   # ...under a different local name
+```
+
+An installed set behaves exactly like one you created yourself — `shrutz gallery install` never changes your active set; switch to it afterward with `shrutz switch`.
+
+---
+
+## Menu Bar App
+
+shrutz stays terminal-first — the CLI and `shrutz dash` remain the primary interface — but for anyone who'd rather not use a terminal at all, there's an optional native menu bar companion. It's a thin client: every action shells out to the real `shrutz` binary and every displayed value comes from its `--json` output, so it never duplicates the daemon's scheduling or wallpaper-apply logic.
+
+```bash
+shrutz menubar install
+```
+
+Builds the app (in `menubar/`, an Xcode project) and installs it to `~/Applications`. Ad-hoc signed — no Apple Developer account needed — requires Xcode. Gives you current wallpaper/timer status, next/prev/pause/resume, a sets switcher, daemon start/stop, weather status, a Creators Publish gallery browser with thumbnails, and a preferences window for the config tunables. See [`menubar/README.md`](menubar/README.md) for details.
 
 ---
 
@@ -186,10 +281,13 @@ Each `config` call patches the script in-place and restarts the daemon immediate
 | `launchctl kickstart` | Restarts `com.apple.wallpaper.agent` so it re-reads the store across all Spaces |
 | Space poll | Every tick: reads `picture of desktop 1`, compares to expected, corrects if mismatched |
 | `launchd` | macOS init system (PID 1). Starts shrutz at login, restarts it if it exits |
-| `state` file | Bash-sourceable key=value file. Persists index, timer, set, shuffle order across reboots |
+| `state` file | Bash-sourceable key=value file. Persists index, timer, set, shuffle order, and weather state across reboots |
+| `weather_map` file | Flat `condition=set` mapping file, edited via `shrutz weather map`/`unmap` |
 | `SIGUSR1` / `SIGUSR2` | Signals sent by `next` / `prev` — wallpaper changes without touching the timer |
 | `SIGHUP` | Signal sent by `pause` / `resume` — toggles the `PAUSED` flag in the running daemon |
 | Fisher-Yates shuffle | Python one-liner generates a random permutation of image indices for shuffle mode |
+| [Open-Meteo](https://open-meteo.com) | Free, no-key weather + geocoding API used by the weather feature |
+| `http_get()` | The one HTTP entry point in the whole script — a thin python3 `urllib` wrapper, used by both weather and the gallery |
 
 ---
 

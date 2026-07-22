@@ -686,6 +686,21 @@ print(' '.join(map(str, order)))
 # CLI COMMANDS
 # ══════════════════════════════════════════════════════════════════
 
+# ── shrutz --version ───────────────────────────────────────────
+# No version constant embedded in the script itself — that would need a
+# build/sync step to keep in lockstep with the repo's VERSION file, which
+# this single-file-script project has never needed. install.sh copies
+# VERSION into $SHRUTZ_LIB alongside the man page; if it's missing (e.g.
+# someone copied only the raw script), fall back to "unknown" rather
+# than erroring.
+cmd_version() {
+    if [[ -f "$SHRUTZ_LIB/VERSION" ]]; then
+        echo "shrutz $(cat "$SHRUTZ_LIB/VERSION")"
+    else
+        echo "shrutz unknown"
+    fi
+}
+
 cmd_status() {
     if [[ "${1:-}" == "--json" ]]; then
         local out loaded="false" pid=0 last_exit=0
@@ -2016,8 +2031,11 @@ case "${1:-daemon}" in
     menubar)      shift; cmd_menubar "$@" ;;
     update)       cmd_update ;;
     dieanddontcomeback) shift; cmd_dieanddontcomeback "$@" ;;
+    -v|--version) cmd_version ;;
     -h|--help|help)
         echo "Usage: shrutz <command> [args]"
+        echo ""
+        echo "  -v, --version             print the installed version"
         echo ""
         echo "  Daemon"
         echo "  ──────────────────────────────────────────────────"

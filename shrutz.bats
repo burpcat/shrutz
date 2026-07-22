@@ -1201,3 +1201,26 @@ STATE
     [ "$status" -ne 0 ]
     [[ "$output" == *"no ShrutzMenuBar.xcodeproj found"* ]]
 }
+
+# ══════════════════════════════════════════════════════════════════
+# VERSION
+# ══════════════════════════════════════════════════════════════════
+
+@test "--version: prints 'unknown' when no VERSION file is installed" {
+    run "$SHRUTZ" --version
+    [ "$status" -eq 0 ]
+    [[ "$output" == "shrutz unknown" ]]
+}
+
+@test "-v: is an alias for --version" {
+    run "$SHRUTZ" -v
+    [ "$status" -eq 0 ]
+    [[ "$output" == "shrutz unknown" ]]
+}
+
+@test "--version: reads the installed VERSION file when present" {
+    echo "2.1.0" > "$SHRUTZ_LIB/VERSION"
+    run "$SHRUTZ" --version
+    [ "$status" -eq 0 ]
+    [[ "$output" == "shrutz 2.1.0" ]]
+}

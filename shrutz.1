@@ -1,10 +1,13 @@
-.TH SHRUTZ 1 "2025" "shrutz" "User Commands"
+.TH SHRUTZ 1 "2026-07-22" "shrutz" "User Commands"
 .SH NAME
 shrutz \- active-time wallpaper rotator for macOS
 .SH SYNOPSIS
 .B shrutz
 .I command
 .RI [ args ]
+.PP
+.B shrutz
+.RB [ \-v | \-\-version ]
 .SH DESCRIPTION
 .B shrutz
 is a wallpaper rotation daemon for macOS that only counts time you are
@@ -27,6 +30,9 @@ pool immediately without resetting the active-time counter.
 .TP
 .B shrutz status
 Show whether the launchd daemon is running, its PID, and last exit code.
+Add
+.B \-\-json
+for machine-readable output (used by the menu bar companion app).
 .TP
 .B shrutz start
 Load and start the launchd agent.
@@ -44,6 +50,21 @@ Pull the latest version from the git repository recorded at install time,
 re-run
 .BR install.sh ,
 and restart the daemon. Requires the repo to still be present on disk.
+.TP
+.B shrutz menubar install
+Build the Swift menu bar companion app from the recorded git repository
+and install it to
+.IR ~/Applications .
+Opt-in only \(em never invoked by
+.BR install.sh .
+Requires Xcode (or the Command Line Tools) to be installed.
+.TP
+.BR "shrutz \-v" ", " "shrutz \-\-version"
+Print the installed version, read from
+.IR ~/.local/lib/shrutz/VERSION .
+Prints
+.B "shrutz unknown"
+if that file is missing.
 .SH PLAYBACK COMMANDS
 .TP
 .B shrutz now
@@ -51,7 +72,9 @@ Print the current wallpaper filename, set name, position in the set,
 active-time progress, and time remaining until the next switch.
 Appends
 .B [PAUSED]
-if the timer is frozen.
+if the timer is frozen. Add
+.B \-\-json
+for machine-readable output.
 .TP
 .B shrutz next
 Advance immediately to the next wallpaper. The active-time counter is
@@ -81,7 +104,9 @@ to exit.
 .TP
 .B shrutz sets
 List all wallpaper sets with image count, creation date, and a marker
-indicating the active set.
+indicating the active set. Add
+.B \-\-json
+for machine-readable output.
 .TP
 .BI "shrutz set create " "name " [ source-path ]
 Create a new wallpaper set. If
@@ -132,11 +157,86 @@ Create a
 archive of a wallpaper set including its metadata. Destination defaults
 to
 .IR ~/Desktop .
+.SH GALLERY COMMANDS ("Creators Publish")
+shrutz ships with no bundled wallpapers. This is a small catalog of
+developer-curated sets \(em including the original
+.B haasan
+set \(em hosted as a JSON manifest on GitHub, that any user can browse
+and optionally download. Nothing here runs automatically; it's purely
+opt-in.
+.TP
+.B shrutz gallery list
+Fetch and display the available sets: name, author, image count,
+whether it's already installed locally, and a short description. Add
+.B \-\-json
+for machine-readable output.
+.TP
+.BI "shrutz gallery install " name " [\-\-as " local-name ]
+Download and extract a set into a new local wallpaper set directory. Use
+.B \-\-as
+to install it under a different local name. Verifies a checksum if the
+manifest provides one. Refuses if a set with that local name already
+exists. Does not change the active set \(em switch to it afterward with
+.BR "shrutz switch" .
+.SH WEATHER COMMANDS
+Automatic wallpaper switching based on live weather conditions at a
+location you set once. Uses the free, no-API-key Open-Meteo service for
+both weather data and city-name geocoding \(em no signup or credentials
+required.
+.TP
+.BR "shrutz weather" " | " "shrutz weather status"
+Show whether auto-switching is enabled, the configured location, the
+last-observed condition and temperature, and the full condition-to-set
+mapping table. Add
+.B \-\-json
+for machine-readable output.
+.TP
+.B shrutz weather on
+Enable auto-switching. Requires a location to already be set.
+.TP
+.B shrutz weather off
+Disable auto-switching. The daemon keeps running normally; only the
+weather-driven switching stops.
+.TP
+.BI "shrutz weather location " "city-name | lat,lon"
+Set the location used for weather lookups. A bare
+.I lat,lon
+pair (e.g.
+.IR 42.36,-71.06 )
+is stored directly; anything else is resolved to coordinates via
+Open-Meteo's geocoding API.
+.TP
+.BI "shrutz weather map " "condition set"
+Map a weather condition to one of your wallpaper sets. Valid conditions:
+.BR clear ,
+.BR cloudy ,
+.BR fog ,
+.BR rain ,
+.BR snow ,
+.BR storm ,
+.BR night .
+The
+.B night
+mapping, if configured, only overrides
+.B clear
+and
+.B cloudy
+after dark \(em severe weather (rain/snow/storm/fog) is shown regardless
+of time of day.
+.TP
+.BI "shrutz weather unmap " condition
+Remove a condition's mapping.
+.TP
+.B shrutz weather check
+Force an immediate weather check and switch decision, without waiting
+for the next scheduled poll.
 .SH INFO COMMANDS
 .TP
 .B shrutz stats
 Show daemon uptime, total wallpaper switches, number of sets, total
-image count, active set name, and current timer progress.
+image count, active set name, and current timer progress. Add
+.B \-\-json
+for machine-readable output.
 .TP
 .BI "shrutz history " [ n ]
 Show the last
@@ -147,7 +247,9 @@ timestamp, position, and filename.
 defaults to 10.
 .TP
 .B shrutz config
-Print the current tunable values.
+Print the current tunable values. Add
+.B \-\-json
+for machine-readable output.
 .TP
 .BI "shrutz config " "key value"
 Set a tunable and restart the daemon so it takes effect immediately.
@@ -165,6 +267,10 @@ away and the timer freezes. Default: 60.
 .B CHECK_EVERY
 How often the daemon polls idle time and checks for mismatches, in
 seconds. Default: 30.
+.TP
+.B WEATHER_POLL_MINS
+How often the daemon polls the weather API when auto-switching is
+enabled, in minutes. Default: 20.
 .RE
 .SH UNINSTALL COMMANDS
 .TP
@@ -209,7 +315,28 @@ Bash-sourceable key=value file persisting runtime state across reboots:
 .BR ACTIVE_SET ,
 .BR PAUSED ,
 .BR PLAY_ORDER ,
-.BR SHRUTZ_REPO .
+.BR SHRUTZ_REPO ,
+and the weather fields
+.BR WEATHER_ENABLED ,
+.BR WEATHER_LAT ,
+.BR WEATHER_LON ,
+.BR WEATHER_LOCATION_LABEL ,
+.BR WEATHER_LAST_POLL ,
+.BR WEATHER_LAST_SET ,
+.BR WEATHER_LAST_CONDITION ,
+.BR WEATHER_LAST_TEMP_F .
+.TP
+.I ~/.local/lib/shrutz/weather_map
+Flat
+.I condition=set-name
+mapping file, one line per mapping, managed via
+.BR "shrutz weather map/unmap" .
+.TP
+.I ~/.local/lib/shrutz/VERSION
+The installed version string, copied from the repo's
+.I VERSION
+file at install time. Read by
+.BR "shrutz --version" .
 .TP
 .I ~/.local/lib/shrutz/shrutz.log
 Activity log. Written by the daemon on every significant event.
@@ -224,6 +351,10 @@ launchd agent definition. Source of truth; symlinked into
 .I ~/Library/Application\ Support/com.apple.wallpaper/Store/Index.plist
 macOS wallpaper store (binary plist). Written by shrutz on every
 wallpaper switch to update all Mission Control Spaces simultaneously.
+.TP
+.I ~/Applications/ShrutzMenuBar.app
+The optional Swift menu bar companion app, installed by
+.BR "shrutz menubar install" .
 .SH SIGNALS
 The daemon responds to the following signals:
 .TP
@@ -245,8 +376,10 @@ and
 Restart (sent by
 .BR "shrutz switch" ,
 .BR "shrutz set rename" ,
-and
-.BR "shrutz config" ).
+.BR "shrutz config" ,
+and the
+.BR "shrutz weather on/off/location/map/unmap"
+commands).
 Also sent by
 .B shrutz dieanddontcomeback
 to stop the daemon before removal.
@@ -256,18 +389,39 @@ restarts the daemon automatically on all cases except uninstall, where
 the plist is unloaded first.
 .SH REQUIREMENTS
 macOS 14 Sonoma or later. bash and python3 (both ship with macOS).
-No third-party dependencies.
+No third-party software dependencies. The weather and gallery features
+are entirely opt-in and require network access to
+.I api.open-meteo.com
+/
+.I geocoding-api.open-meteo.com
+(weather) or
+.I raw.githubusercontent.com
+/
+.I github.com
+(gallery) only when actually used; nothing is contacted otherwise.
+Building the menu bar companion app additionally requires Xcode.
 .SH INSTALLATION
 .nf
 git clone https://github.com/burpcat/shrutz.git
 cd shrutz
 chmod +x shrutz install.sh
-./install.sh
+\&./install.sh
 .fi
 .PP
-The installer prompts for a wallpaper folder to import into the default
-set during setup. Press Enter to skip and add images later with
+On a fresh install, the installer prompts you to name your first
+wallpaper set (this becomes the active set) and optionally import a
+folder of images into it. Press Enter to accept the default name
+.RB ( main )
+or to skip the import \(em add images later with
 .BR "shrutz import" .
+shrutz ships with no bundled wallpapers; browse developer-curated sets,
+including the original
+.B haasan
+set, with
+.BR "shrutz gallery list" .
+Re-running
+.B install.sh
+on an existing install (repairs, upgrades) skips this prompt entirely.
 After installation reload your shell:
 .PP
 .nf

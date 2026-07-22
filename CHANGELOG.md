@@ -1,10 +1,22 @@
 # Changelog
 
-## Unreleased
+## v2.1.0
 
 **Fixed `next` / `prev` / `pause` / `resume` latency.** The daemon's main loop blocked on a plain foreground `sleep`, which defers bash trap execution until the sleep finishes — so these commands could take up to `CHECK_EVERY` seconds (30s by default) to actually apply. The loop now backgrounds the sleep and `wait`s on it, so signals are handled immediately.
 
 **Tightened `daemon_pid()`.** Its `pgrep` pattern is now anchored to end-of-string so it matches only the launchd-spawned daemon (invoked with no arguments), not any currently-running `shrutz` subcommand whose own argv happens to contain the same script path.
+
+**Weather-based automatic wallpaper switching.** Set a location once (`shrutz weather location`, city name or lat,lon — geocoded via the free Open-Meteo API) and map weather conditions to your own wallpaper sets (`shrutz weather map <condition> <set>`). Once enabled (`shrutz weather on`), the daemon polls on its own schedule (`WEATHER_POLL_MINS`) and switches in-process — no daemon restart — when the mapped condition changes. A manual `shrutz switch` is respected until the underlying condition actually changes to a different mapped target.
+
+**Creators Publish gallery.** `shrutz gallery list` / `shrutz gallery install <name>` browse and download wallpaper sets published by the developer, hosted as a JSON manifest on GitHub. A gallery-installed set behaves exactly like a locally-created one.
+
+**Redesigned install flow.** A fresh install now prompts you to name your own first wallpaper set instead of force-seeding a fixed default — that name becomes `ACTIVE_SET` directly, with no separately-hardcoded name left to drift out of sync. The original `haasan` set is no longer bundled by default; it's available via the gallery. Also fixes an empty-set crash loop: the installer no longer loads the daemon until the active set actually has images.
+
+**`--json` output** on `now`, `sets`, `status`, `stats`, `config`, and `weather`, for scripting or the new menu bar app.
+
+**Swift menu bar companion app** (`shrutz menubar install`). shrutz stays terminal-first; this is an optional thin-client GUI for people who'd rather not use the CLI — current wallpaper/timer status, next/prev/pause/resume, a sets switcher, weather status, a gallery browser, and a preferences window, all driven by the CLI's `--json` output.
+
+**`shrutz --version` / `-v`.** Prints the installed version from a new `VERSION` file.
 
 ## v2.0.0
 
