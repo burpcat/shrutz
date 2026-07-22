@@ -2,3 +2,7 @@
 .claude/
 wallpaper-drafts/
 wallpapers/
+# Swift menu bar app — generated/user-specific, not the source of truth
+menubar/**/xcuserdata/
+menubar/**/*.xcuserstate
+menubar/DerivedData/
