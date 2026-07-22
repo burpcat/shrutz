@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.1.1
+
+**Fixed `next` / `prev` only updating the active Space.** A previous hotfix had `_sig_next`/`_sig_prev` apply the new wallpaper to only the frontmost Space, relying on the ~30s space-poll loop to correct every other Space. They now call the same all-spaces application path (`Index.plist` write + wallpaper agent reload) already used by `switch` and weather auto-switching, so every Space updates together immediately instead of drifting until the next poll.
+
 ## v2.1.0
 
 **Fixed `next` / `prev` / `pause` / `resume` latency.** The daemon's main loop blocked on a plain foreground `sleep`, which defers bash trap execution until the sleep finishes — so these commands could take up to `CHECK_EVERY` seconds (30s by default) to actually apply. The loop now backgrounds the sleep and `wait`s on it, so signals are handled immediately.
