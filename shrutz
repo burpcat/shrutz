@@ -112,9 +112,11 @@ refresh_init_count() {
 
 # Get the PID of the running daemon (launchd-managed shrutz process).
 # launchd spawns: /usr/bin/env bash ~/.local/bin/shrutz  (no arguments)
-# We match on the script path itself — specific enough to avoid false positives.
+# Anchored at end-of-string so this matches only that bare invocation —
+# without the anchor it also matches any CLI subcommand currently running
+# (e.g. "shrutz next" itself), since its argv contains the same path prefix.
 daemon_pid() {
-    pgrep -f "$HOME/.local/bin/shrutz" 2>/dev/null | head -1
+    pgrep -f "$HOME/.local/bin/shrutz\$" 2>/dev/null | head -1
 }
 
 # Signal the daemon to restart via launchd (SIGTERM → launchd restarts it).
@@ -357,7 +359,14 @@ print(' '.join(map(str, order)))
     log "Restored → [$(( CURRENT_INDEX + 1 ))/$TOTAL] $(basename "$current_wp")"
 
     while true; do
-        sleep "$CHECK_EVERY"
+        # Backgrounded + waited (not a plain foreground `sleep`) so that
+        # USR1/USR2/HUP traps fire immediately when next/prev/pause/resume
+        # signal the daemon. Bash defers trap execution until a foreground
+        # command finishes, but `wait` on a background job is interrupted
+        # by a pending trap right away — otherwise next/prev could take up
+        # to $CHECK_EVERY seconds to take effect.
+        sleep "$CHECK_EVERY" &
+        wait "$!"
 
         idle=$(idle_seconds)
 
