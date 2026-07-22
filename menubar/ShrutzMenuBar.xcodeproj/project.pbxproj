@@ -11,9 +11,9 @@
 		36DAA64FB2302891805C0CFA /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6229F6560282793F60D3F218 /* GalleryView.swift */; };
 		37E2354EFF9A6A48FFDCDB29 /* ShrutzCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */; };
 		3B641451E9E6C50F0CDEDBC8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */; };
+		7B4420EE9648802F23D441D3 /* ShrutzPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */; };
 		7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFD238900D6BD207D99599C /* LoginItemManager.swift */; };
 		7F878401F8867E162D3079C3 /* ShrutzState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C69135962231ACE365BD7B /* ShrutzState.swift */; };
-		85EF438E787F436706999503 /* MenuContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D668CC3A06C0DCEE8FC3B1D /* MenuContentView.swift */; };
 		A333985F01493AC4B26751B5 /* StateWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9340E3B495901BC7A39FB513 /* StateWatcher.swift */; };
 		CF5F31E06FC1126A8B005B83 /* ShrutzMenuBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */; };
 		D279C0BEFF23D240CDC8A6A3 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13BB02295ED61AC05180E70C /* AppState.swift */; };
@@ -23,9 +23,9 @@
 /* Begin PBXFileReference section */
 		13BB02295ED61AC05180E70C /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzMenuBarApp.swift; sourceTree = "<group>"; };
-		2D668CC3A06C0DCEE8FC3B1D /* MenuContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuContentView.swift; sourceTree = "<group>"; };
 		6229F6560282793F60D3F218 /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
 		77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzCLI.swift; sourceTree = "<group>"; };
+		7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzPanelView.swift; sourceTree = "<group>"; };
 		89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9340E3B495901BC7A39FB513 /* StateWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateWatcher.swift; sourceTree = "<group>"; };
 		9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherSectionView.swift; sourceTree = "<group>"; };
@@ -71,8 +71,8 @@
 			isa = PBXGroup;
 			children = (
 				6229F6560282793F60D3F218 /* GalleryView.swift */,
-				2D668CC3A06C0DCEE8FC3B1D /* MenuContentView.swift */,
 				C99C1887C31A081D4F2E5162 /* PreferencesView.swift */,
+				7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */,
 				9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */,
 			);
 			path = Views;
@@ -168,10 +168,10 @@
 				D279C0BEFF23D240CDC8A6A3 /* AppState.swift in Sources */,
 				36DAA64FB2302891805C0CFA /* GalleryView.swift in Sources */,
 				7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */,
-				85EF438E787F436706999503 /* MenuContentView.swift in Sources */,
 				EB0597EDEBD2262087BF475E /* PreferencesView.swift in Sources */,
 				37E2354EFF9A6A48FFDCDB29 /* ShrutzCLI.swift in Sources */,
 				CF5F31E06FC1126A8B005B83 /* ShrutzMenuBarApp.swift in Sources */,
+				7B4420EE9648802F23D441D3 /* ShrutzPanelView.swift in Sources */,
 				7F878401F8867E162D3079C3 /* ShrutzState.swift in Sources */,
 				A333985F01493AC4B26751B5 /* StateWatcher.swift in Sources */,
 				16EA2FA3742626AA1917DF50 /* WeatherSectionView.swift in Sources */,
@@ -321,7 +321,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.burpcat.shrutz.menubar;
-				PRODUCT_NAME = ShrutzMenuBar;
+				PRODUCT_NAME = Shrutz;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 			};
@@ -348,7 +348,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.burpcat.shrutz.menubar;
-				PRODUCT_NAME = ShrutzMenuBar;
+				PRODUCT_NAME = Shrutz;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 			};

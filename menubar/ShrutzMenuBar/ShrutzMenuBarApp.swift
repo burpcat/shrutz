@@ -5,11 +5,11 @@ struct ShrutzMenuBarApp: App {
     @StateObject private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra("shrutz", systemImage: "photo.on.rectangle.angled") {
-            MenuContentView()
+        MenuBarExtra("Shrutz", image: "MenuBarIcon") {
+            ShrutzPanelView()
                 .environmentObject(appState)
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
 
         Settings {
             PreferencesView()
