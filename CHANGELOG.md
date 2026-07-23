@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.2.0
+
+**Menu bar app rebranded and redesigned as "Shrutz."** The app now builds and displays as `Shrutz.app` everywhere (Activity Monitor, Finder, the system About panel) instead of the old lowercase `shrutz` / `ShrutzMenuBar.app`, with a real app icon and logo mark. The dropdown is now a custom-drawn card (a `MenuBarExtra` in `.window` style) matching a cream/navy design — logo header, a "Wallpaper Set" picker, a playback row, and an overflow menu for daemon control / the terminal dashboard / About / Quit — instead of a flat native menu. No behavior changed: every control still calls the same CLI commands as before.
+
+**Creators Publish now points at a dedicated content repo.** The gallery manifest fetch (and the manifest's own thumbnail/download URLs) now point at `burpcat/shrutz-wallpaper-repo` instead of this code repo, matching the single-source-of-truth design the feature was always meant to have.
+
+**Fixed `shrutz menubar install`.** The installer still looked for the old `ShrutzMenuBar.app` product name — updated to match the app's new `Shrutz.app` product name so the documented install path works again.
+
 ## v2.1.1
 
 **Fixed `next` / `prev` only updating the active Space.** A previous hotfix had `_sig_next`/`_sig_prev` apply the new wallpaper to only the frontmost Space, relying on the ~30s space-poll loop to correct every other Space. They now call the same all-spaces application path (`Index.plist` write + wallpaper agent reload) already used by `switch` and weather auto-switching, so every Space updates together immediately instead of drifting until the next poll.

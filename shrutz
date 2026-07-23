@@ -1913,16 +1913,16 @@ cmd_menubar_install() {
 
     local build_dir
     build_dir=$(mktemp -d "${TMPDIR:-/tmp}/shrutz-menubar-build-XXXXXX")
-    echo "shrutz: building ShrutzMenuBar..."
+    echo "shrutz: building Shrutz..."
     ( cd "$project_dir" && xcodebuild -project ShrutzMenuBar.xcodeproj -scheme ShrutzMenuBar \
         -configuration Release -derivedDataPath "$build_dir" build ) \
         || die "build failed — see output above"
 
-    local built_app="$build_dir/Build/Products/Release/ShrutzMenuBar.app"
-    [[ -d "$built_app" ]] || die "build succeeded but ShrutzMenuBar.app was not found at the expected path"
+    local built_app="$build_dir/Build/Products/Release/Shrutz.app"
+    [[ -d "$built_app" ]] || die "build succeeded but Shrutz.app was not found at the expected path"
 
     mkdir -p "$HOME/Applications"
-    local dest_app="$HOME/Applications/ShrutzMenuBar.app"
+    local dest_app="$HOME/Applications/Shrutz.app"
     rm -rf "$dest_app"
     cp -R "$built_app" "$dest_app"
     rm -rf "$build_dir"
