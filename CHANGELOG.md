@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.3.0
+
+**`shrutz menubar uninstall`.** Counterpart to `shrutz menubar install` — prompts `really?`, quits the app if it's running, and removes `~/Applications/Shrutz.app`. Reports cleanly if the app isn't installed rather than prompting for nothing to do. Notes that a "Launch at Login" registration may leave a stale Login Items entry macOS itself has no CLI-triggerable way to remove.
+
 ## v2.2.0
 
 **Menu bar app rebranded and redesigned as "Shrutz."** The app now builds and displays as `Shrutz.app` everywhere (Activity Monitor, Finder, the system About panel) instead of the old lowercase `shrutz` / `ShrutzMenuBar.app`, with a real app icon and logo mark. The dropdown is now a custom-drawn card (a `MenuBarExtra` in `.window` style) matching a cream/navy design — logo header, a "Wallpaper Set" picker, a playback row, and an overflow menu for daemon control / the terminal dashboard / About / Quit — instead of a flat native menu. No behavior changed: every control still calls the same CLI commands as before.

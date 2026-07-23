@@ -1896,8 +1896,9 @@ cmd_update() {
 cmd_menubar() {
     local subcmd="${1:-}"
     case "$subcmd" in
-        install) cmd_menubar_install ;;
-        *) die "Usage: shrutz menubar install" ;;
+        install)   cmd_menubar_install ;;
+        uninstall) cmd_menubar_uninstall ;;
+        *) die "Usage: shrutz menubar install|uninstall" ;;
     esac
 }
 
@@ -1931,6 +1932,35 @@ cmd_menubar_install() {
     open "$dest_app"
     echo "shrutz: launched. Look for the icon in your menu bar — enable "
     echo "        \"Launch at Login\" from its Preferences if you'd like."
+}
+
+cmd_menubar_uninstall() {
+    local dest_app="$HOME/Applications/Shrutz.app"
+
+    if [[ ! -d "$dest_app" ]]; then
+        echo "shrutz: Shrutz.app is not installed at $dest_app — nothing to do."
+        exit 0
+    fi
+
+    printf 'really? '
+    read -r answer
+    local answer_lower; answer_lower=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+    [[ "$answer_lower" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
+
+    # Quitting via pkill (matching the built executable's path) rather than
+    # `osascript ... tell application ... quit` — the latter would trigger a
+    # brand-new Automation permission prompt to control another app, which
+    # this all-bash tool otherwise never needs (see ShrutzPanelView's own
+    # openDashboard() comment for the same concern in the other direction).
+    echo "shrutz: quitting Shrutz if it's running..."
+    pkill -f "$dest_app/Contents/MacOS/Shrutz" 2>/dev/null || true
+
+    echo "shrutz: removing $dest_app..."
+    rm -rf "$dest_app"
+
+    echo "shrutz: gone. if you had enabled \"Launch at Login\" from its Preferences,"
+    echo "        macOS may still show a stale entry — remove it manually from"
+    echo "        System Settings → General → Login Items."
 }
 
 # ── shrutz dieanddontcomeback [--ever|-e] ─────────────────────
@@ -2030,6 +2060,7 @@ case "${1:-daemon}" in
         echo "  stop                      unload and stop the daemon"
         echo "  update                    pull latest version and reinstall"
         echo "  menubar install           build + install the menu bar companion app"
+        echo "  menubar uninstall         quit + remove the menu bar companion app"
         echo ""
         echo "  Playback"
         echo "  ──────────────────────────────────────────────────"

@@ -59,6 +59,15 @@ Opt-in only \(em never invoked by
 .BR install.sh .
 Requires Xcode (or the Command Line Tools) to be installed.
 .TP
+.B shrutz menubar uninstall
+Prompts
+.B really?
+and, on confirmation, quits the app if it's running and removes
+.I ~/Applications/Shrutz.app .
+If "Launch at Login" had been enabled from the app's own Preferences,
+macOS may still show a stale Login Items entry afterward \(em remove it
+manually from System Settings \(-> General \(-> Login Items.
+.TP
 .BR "shrutz \-v" ", " "shrutz \-\-version"
 Print the installed version, read from
 .IR ~/.local/lib/shrutz/VERSION .

@@ -269,6 +269,12 @@ shrutz menubar install
 
 Builds the app (in `menubar/`, an Xcode project) and installs it to `~/Applications`. Ad-hoc signed — no Apple Developer account needed — requires Xcode. Gives you current wallpaper/timer status, next/prev/pause/resume, a sets switcher, daemon start/stop, weather status, a Creators Publish gallery browser with thumbnails, and a preferences window for the config tunables. See [`menubar/README.md`](menubar/README.md) for details.
 
+```bash
+shrutz menubar uninstall
+```
+
+Asks `really?` to confirm, quits the app if it's running, and removes `~/Applications/Shrutz.app`. If you'd enabled "Launch at Login" from its Preferences, macOS may still show a stale Login Items entry afterward — remove it manually from System Settings → General → Login Items.
+
 ---
 
 ## Internals
