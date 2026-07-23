@@ -98,6 +98,26 @@ _state_get() {
     [ -f "$TEST_HOME/.local/lib/shrutz/VERSION" ]
 }
 
+@test "install: writes the binary via an atomic temp-file swap, leaving no stray temp file behind" {
+    run bash -c "printf 'vacation\n%s\n' '$IMPORT_SRC' | '$INSTALL_SH'"
+    [ "$status" -eq 0 ]
+    [ -x "$TEST_HOME/.local/bin/shrutz" ]
+    diff "$TEST_HOME/.local/bin/shrutz" "$REPO_DIR/shrutz"
+    # The temp file (.shrutz.XXXXXX) must have been renamed into place, not
+    # left alongside it — a leftover would mean the swap didn't complete.
+    run bash -c "ls -A '$TEST_HOME/.local/bin'"
+    [[ "$output" != *".shrutz."* ]]
+}
+
+@test "repair run: re-installing the binary is still atomic with no stray temp file" {
+    bash -c "printf 'vacation\n%s\n' '$IMPORT_SRC' | '$INSTALL_SH'" >/dev/null
+    run bash -c "printf '' | '$INSTALL_SH'"
+    [ "$status" -eq 0 ]
+    [ -x "$TEST_HOME/.local/bin/shrutz" ]
+    run bash -c "ls -A '$TEST_HOME/.local/bin'"
+    [[ "$output" != *".shrutz."* ]]
+}
+
 @test "repair run: does not re-prompt and preserves the existing active set" {
     bash -c "printf 'vacation\n%s\n' '$IMPORT_SRC' | '$INSTALL_SH'" >/dev/null
 
