@@ -1,11 +1,12 @@
 import SwiftUI
 import AppKit
 
-/// A tactile circular drag-to-set control used for every duration/tunable
-/// in the General tab, instead of a plain stepper/text field. Drag radius
-/// controls sensitivity: near the center moves in big, coarse jumps (fast
-/// scrubbing across a wide range); out toward the rim moves in small, fine
-/// increments (precise adjustment) — like an inner/outer jog-wheel.
+/// A compact tactile rotary dial (mockup 03: ~48pt, dark fill, a big
+/// centered number + tiny unit label, a thin red progress arc around the
+/// rim) used for every duration/tunable in the General tab instead of a
+/// plain stepper. Drag radius controls sensitivity: near the center moves
+/// in big, coarse jumps; out toward the rim moves in small, fine
+/// increments.
 struct RotaryDurationDial: View {
     let label: String
     @Binding var value: Int
@@ -19,61 +20,63 @@ struct RotaryDurationDial: View {
     @State private var dragStartAngle: Double?
     @State private var lastSnappedValue: Int?
 
-    private let diameter: CGFloat = 92
-    private let tickCount = 24
+    private let diameter: CGFloat = 48
 
     var body: some View {
-        VStack(spacing: 6) {
+        HStack {
             HStack(spacing: 4) {
                 Text(label)
-                    .font(.shrutzSans(12, weight: .medium))
-                    .foregroundColor(ShrutzPalette.navy.opacity(0.85))
+                    .font(.system(size: 13))
+                    .foregroundColor(ShrutzPalette.textPrimary)
                 Button {
                     showHelp = true
                 } label: {
                     Image(systemName: "info.circle")
-                        .font(.system(size: 11))
-                        .foregroundColor(ShrutzPalette.navy.opacity(0.55))
+                        .font(.system(size: 12))
+                        .foregroundColor(ShrutzPalette.textSecondary)
                 }
                 .buttonStyle(.plain)
                 .popover(isPresented: $showHelp, arrowEdge: .top) {
                     Text(helpText)
-                        .font(.shrutzSans(12))
+                        .font(.system(size: 12))
                         .padding(10)
                         .frame(maxWidth: 220)
                 }
             }
-
+            Spacer()
             dial
         }
     }
 
     private var dial: some View {
         ZStack {
-            ForEach(0..<tickCount, id: \.self) { i in
-                Rectangle()
-                    .fill(ShrutzPalette.navy.opacity(0.25))
-                    .frame(width: 1.5, height: i % 6 == 0 ? 8 : 4)
-                    .offset(y: -(diameter / 2 - 6))
-                    .rotationEffect(.degrees(Double(i) / Double(tickCount) * 360))
-            }
+            Circle()
+                .fill(Color.black.opacity(0.82))
 
             Circle()
-                .strokeBorder(ShrutzPalette.navy.opacity(0.2), lineWidth: 2)
-                .frame(width: diameter - 24, height: diameter - 24)
+                .trim(from: 0, to: progressFraction)
+                .stroke(ShrutzPalette.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .padding(2.5)
 
             VStack(spacing: 0) {
                 Text("\(value)")
-                    .font(.shrutzSerif(20, weight: .medium))
-                    .foregroundColor(ShrutzPalette.navy)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
                 Text(unit)
-                    .font(.shrutzSans(10))
-                    .foregroundColor(ShrutzPalette.navy.opacity(0.6))
+                    .font(.system(size: 8))
+                    .foregroundColor(.white.opacity(0.6))
             }
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())
         .gesture(dragGesture)
+    }
+
+    private var progressFraction: CGFloat {
+        let width = Double(range.upperBound - range.lowerBound)
+        guard width > 0 else { return 0 }
+        return CGFloat((Double(value) - Double(range.lowerBound)) / width)
     }
 
     private var dragGesture: some Gesture {
@@ -101,8 +104,8 @@ struct RotaryDurationDial: View {
                 // fine near the rim (large radius → less value per radian).
                 let radiusFraction = min(1, max(0, radius / (diameter / 2)))
                 let rangeWidth = Double(range.upperBound - range.lowerBound)
-                let coarseScale = rangeWidth / (.pi / 2)   // quarter turn spans the whole range
-                let fineScale = rangeWidth / (6 * .pi)      // three full turns spans the whole range
+                let coarseScale = rangeWidth / (.pi / 2)
+                let fineScale = rangeWidth / (6 * .pi)
                 let scale = coarseScale + (fineScale - coarseScale) * radiusFraction
 
                 let rawValue = startValue + angleDelta * scale
@@ -125,13 +128,14 @@ struct RotaryDurationDial: View {
 
 #Preview {
     RotaryDurationDial(
-        label: "Active minutes",
+        label: "Active-use time before switch",
         value: .constant(30),
-        range: 1...120,
+        range: 1...180,
         step: 1,
         unit: "min",
         helpText: "Minutes of actual keyboard/mouse use before the wallpaper advances — time away from the machine doesn't count."
     )
     .padding()
-    .background(ShrutzPalette.panelBackground)
+    .frame(width: 320)
+    .background(Color.gray)
 }

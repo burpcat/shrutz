@@ -1,36 +1,52 @@
 import SwiftUI
 
-/// The "Shrutz" logo lockup — a single `Text` run (splitting "Shrut" + "z"
-/// into two Text views would break native kerning between them) in
-/// Cormorant Garamond italic, with a hand-tuned hairline bar overlaid on
-/// the trailing "z" to match the crossed-z in the design reference. No
-/// OFL serif ships a naturally barred z, and applying this overlay to
-/// every body-text z would look absurd — this bar exists only here, in
-/// the standalone wordmark lockup.
+/// The "Shrutz" wordmark lockup, per the approved mockups: an ornate
+/// script capital "S" (Pinyon Script), "hrut" in plain Cormorant Garamond
+/// (NOT italic/script — only the S is ornate), and a bold red "z" with a
+/// hand-tuned hairline bar overlay. Used everywhere: the popover header
+/// and every Settings-window header — never a plain serif rendering of
+/// the whole word (that's a rendering artifact in some mockups, not the
+/// design intent).
 ///
-/// The overlay's offset/width are tuned by eye at `size` — if reused at a
-/// meaningfully different size, re-tune rather than assuming it scales
-/// linearly (italic slant and letter spacing don't scale perfectly linearly
-/// with point size).
+/// `scriptScale` compensates for Pinyon Script's capital having a much
+/// smaller apparent cap-height than its em size relative to a plain serif
+/// at the same point size — tune this and the bar overlay by comparing a
+/// screenshot against menubar/design/reference/01-logo-variants.png.
 struct ShrutzWordmark: View {
-    var size: CGFloat = 18
-    var color: Color = ShrutzPalette.navy
+    var size: CGFloat = 20
+    var color: Color = ShrutzPalette.wordmarkLight
+
+    private var scriptSize: CGFloat { size * 2.0 }
 
     var body: some View {
-        Text("Shrutz")
-            .font(.shrutzSerif(size, weight: .medium, italic: true))
-            .foregroundColor(color)
-            .overlay(alignment: .trailing) {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text("S")
+                .font(.shrutzWordmarkScript(scriptSize))
+                .foregroundColor(color)
+            Text("hrut")
+                .font(.shrutzSerif(size, weight: .regular))
+                .foregroundColor(color)
+            ZStack {
+                Text("z")
+                    .font(.shrutzSerif(size, weight: .semibold))
+                    .foregroundColor(ShrutzPalette.accent)
                 Capsule()
-                    .fill(color)
-                    .frame(width: size * 0.34, height: max(1, size * 0.055))
-                    .offset(x: -size * 0.12, y: size * 0.03)
+                    .fill(ShrutzPalette.accent)
+                    .frame(width: size * 0.42, height: max(1, size * 0.07))
+                    .offset(y: size * 0.02)
             }
+        }
+        .fixedSize()
     }
 }
 
 #Preview {
-    ShrutzWordmark(size: 32)
-        .padding()
-        .background(ShrutzPalette.panelBackground)
+    VStack(spacing: 20) {
+        ShrutzWordmark(size: 24, color: ShrutzPalette.wordmarkLight)
+            .padding(24)
+            .background(Color.black)
+        ShrutzWordmark(size: 24, color: ShrutzPalette.wordmarkDark)
+            .padding(24)
+            .background(Color.white)
+    }
 }

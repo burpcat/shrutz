@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.5.0
+
+**Menu bar app: rebuilt to match the approved mockups exactly.** A first redesign pass missed the mark visually — this pass rebuilds the popover, wordmark, and every Settings tab against nine approved mockups, with a screenshot-by-screenshot fidelity check against them (see `menubar/design/FIDELITY.md`). Highlights: the popover is now a two-state card (a ~200×90 wordmark-only collapsed tile that spring-expands to a ~340×180 now-playing view on click), the wordmark is a real ornate script "S" (Pinyon Script, OFL) + plain serif "hrut" + barred red "z" instead of a hand-drawn approximation, the ambient glass tint now samples wallpaper colors spatially (by quadrant/center) instead of by frequency so it reads as a genuine multi-tone mesh instead of one muddy color, every accent is the same red (`#E5342B`, no blue anywhere), Sets/Creators Publish content uses Cormorant Garamond with its true small-caps sibling for author/count labels, and "Launch at login" now mirrors the daemon's own launchd registration (new `shrutz autostart on|off`) instead of a separate app-only login item, so the app and daemon truly start together. Also fixes a real bug found via user report: the Settings window could render completely blank, because it checked `window.contentView == nil` to decide whether to attach content — a freshly-created `NSWindow` is never actually nil there, so the real view was never attached.
+
+**`shrutz autostart on|off|status`.** Enables/disables the daemon's LaunchAgent starting at login (`RunAtLoad`), separate from `start`/`stop` (which only affect the current session). Reported in `status --json` as `autostart_enabled`.
+
 ## v2.4.1
 
 **Fixed `shrutz update` printing garbled output/errors on its own run.** `install.sh` overwrote `~/.local/bin/shrutz` in place with `cp` — since `shrutz update` runs *from* that very file, the currently-executing process could read misaligned data from the file while it was being rewritten out from under it, producing spurious "command not found"/syntax errors in that one invocation's tail output (the file on disk was always written correctly; only the live update run's own terminal output was affected). Now writes to a temp file in the same directory and atomically renames it into place instead.

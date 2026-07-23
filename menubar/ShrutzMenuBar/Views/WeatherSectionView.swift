@@ -11,13 +11,13 @@ enum WeatherCondition: String, CaseIterable {
 
     var tint: [Color] {
         switch self {
-        case .clear: return [Color(hex: 0x4A90D9), Color(hex: 0xE8C468)]
+        case .clear: return [Color(hex: 0xE8B84A), Color(hex: 0xF3D98A)]
         case .cloudy: return [Color(hex: 0xB8BCC2), Color(hex: 0xD8DADD)]
         case .fog: return [Color(hex: 0xCFCFC9), Color(hex: 0xE8E8E3)]
-        case .rain: return [Color(hex: 0x3E5C76), Color(hex: 0x1F3A52)]
-        case .snow: return [Color(hex: 0xFFFFFF), Color(hex: 0xC9DCEA)]
+        case .rain: return [Color(hex: 0x3E5C6E), Color(hex: 0x27414F)]
+        case .snow: return [Color(hex: 0xFFFFFF), Color(hex: 0xD8E2E8)]
         case .storm: return [Color(hex: 0x3A3A42), Color(hex: 0x6B4E8E)]
-        case .night: return [Color(hex: 0x2C2F5A), Color(hex: 0x0F1330)]
+        case .night: return [Color(hex: 0x2C2F5A), Color(hex: 0x14163A)]
         }
     }
 }
@@ -42,23 +42,22 @@ private struct WeatherEnablePrompt: View {
     var body: some View {
         VStack(spacing: 18) {
             Spacer()
-            Text("Enable auto-switching?")
-                .font(.shrutzSerif(22, weight: .semibold))
-                .foregroundColor(ShrutzPalette.navy)
-            Text("Set a location once, then map weather conditions to your own wallpaper sets — the daemon switches automatically as the weather changes.")
-                .font(.shrutzSans(13))
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 340)
+            Text("Enable weather-based switching?")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(ShrutzPalette.textPrimary)
+                .textScrim()
 
+            // Not shown in the mockup, but functionally required — `weather
+            // on` refuses without a location set first.
             TextField("City name or lat,lon", text: $locationInput)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 260)
+                .frame(maxWidth: 240)
 
             HStack(spacing: 12) {
                 Button("Yes") { Task { await enable() } }
                     .buttonStyle(.borderedProminent)
-                Button("Why not, yes!") { Task { await enable() } }
+                    .tint(ShrutzPalette.accent)
+                Button("why not, yes!") { Task { await enable() } }
                     .buttonStyle(.bordered)
             }
             .disabled(locationInput.isEmpty || submitting)
@@ -87,110 +86,123 @@ private struct WeatherMappingEditor: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            conditionSelector
-                .frame(maxWidth: .infinity)
-                .frame(height: 140)
-                .background(LinearGradient(colors: selectedCondition.tint, startPoint: .topLeading, endPoint: .bottomTrailing))
-
-            setPicker
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 180)
+        VStack(spacing: 16) {
+            topZone
+            bottomZone
         }
+        .padding(20)
     }
 
-    private var conditionSelector: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 10) {
-            ForEach(WeatherCondition.allCases, id: \.self) { condition in
-                Button {
-                    selectedCondition = condition
-                } label: {
-                    VStack(spacing: 4) {
-                        Text(condition.label)
-                            .font(.shrutzSans(12, weight: condition == selectedCondition ? .semibold : .regular))
-                    }
-                    .padding(8)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(.white.opacity(condition == selectedCondition ? 0.35 : 0.12))
-                    )
-                    .foregroundColor(.white)
+    private var topZone: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("TOP ZONE")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(ShrutzPalette.textSecondary)
+
+            Menu {
+                ForEach(WeatherCondition.allCases, id: \.self) { condition in
+                    Button(condition.label) { selectedCondition = condition }
                 }
-                .buttonStyle(.plain)
+            } label: {
+                HStack {
+                    Text(selectedCondition.label)
+                        .foregroundColor(.white)
+                    Spacer()
+                    Image(systemName: "chevron.down").foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
+            .menuStyle(.borderlessButton)
         }
-        .padding(16)
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(LinearGradient(colors: selectedCondition.tint, startPoint: .topLeading, endPoint: .bottomTrailing))
+        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
     }
 
-    private var setPicker: some View {
-        Group {
+    private var bottomZone: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Associate a wallpaper set")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white)
+            Text("Zone renders neutral grey when unselected")
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.7))
+
+            Menu {
+                ForEach(appState.sets) { set in
+                    Button(set.name) {
+                        Task { await appState.mapWeather(condition: selectedCondition.rawValue, set: set.name) }
+                    }
+                }
+                if mappedSetName != nil {
+                    Divider()
+                    Button("Unmap") { Task { await appState.unmapWeather(condition: selectedCondition.rawValue) } }
+                }
+            } label: {
+                HStack {
+                    Text(mappedSetName ?? "Choose a set")
+                        .foregroundColor(.white)
+                    Spacer()
+                    Image(systemName: "chevron.down").foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .menuStyle(.borderlessButton)
+            .disabled(appState.sets.isEmpty)
+
             if let mappedSetName {
-                MappedSetTintedView(setName: mappedSetName, condition: selectedCondition) {
-                    Task { await appState.unmapWeather(condition: selectedCondition.rawValue) }
-                }
-            } else {
-                unmappedPicker
+                filmstrip(for: mappedSetName)
             }
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
+        .background(mappedPalette == nil ? AnyView(ShrutzPalette.pausedGlass) : AnyView(FrostedTintBackground(palette: mappedPalette)))
+        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
     }
 
-    private var unmappedPicker: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Map \(selectedCondition.label.lowercased()) to a set")
-                .font(.shrutzSerif(15, weight: .medium))
-                .foregroundColor(ShrutzPalette.navy)
-            if appState.sets.isEmpty {
-                Text("No sets yet.").foregroundColor(.secondary)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 4) {
-                        ForEach(appState.sets) { set in
-                            Button(set.name) {
-                                Task { await appState.mapWeather(condition: selectedCondition.rawValue, set: set.name) }
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.vertical, 4)
-                        }
-                    }
+    @State private var mappedPalette: WallpaperPalette?
+
+    private func filmstrip(for setName: String) -> some View {
+        let paths = appState.sets.first(where: { $0.name == setName })?.imagePaths.prefix(4) ?? []
+        return ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 8) {
+                ForEach(Array(paths), id: \.self) { path in
+                    WeatherFilmstripThumbnail(path: path)
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(ShrutzPalette.controlBackground)
+        .task(id: setName) {
+            guard let path = appState.sets.first(where: { $0.name == setName })?.imagePaths.first else {
+                mappedPalette = nil
+                return
+            }
+            mappedPalette = try? await WallpaperPaletteExtractor.extractPalette(fromImageAt: path)
+        }
     }
 }
 
-/// Once a condition is mapped to a set, extract that set's palette (reusing
-/// the same native extractor and blob-wash renderer as the live tinting
-/// engine) and compose a considered multi-colour tint rather than a flat
-/// color — deliberately reused for visual/implementation consistency.
-private struct MappedSetTintedView: View {
-    let setName: String
-    let condition: WeatherCondition
-    let onUnmap: () -> Void
-
-    @EnvironmentObject var appState: AppState
-    @State private var palette: WallpaperPalette?
-
-    private var representativeImagePath: String? {
-        appState.sets.first(where: { $0.name == setName })?.imagePaths.first
-    }
+private struct WeatherFilmstripThumbnail: View {
+    let path: String
+    @State private var image: NSImage?
 
     var body: some View {
-        ZStack {
-            FrostedTintBackground(palette: palette)
-            VStack(spacing: 8) {
-                Text(setName)
-                    .font(.shrutzSerif(18, weight: .medium))
-                    .foregroundColor(ShrutzPalette.navy)
-                Button("Unmap", action: onUnmap)
+        Group {
+            if let image {
+                Image(nsImage: image).resizable().scaledToFill()
+            } else {
+                Shimmer()
             }
         }
-        .task(id: representativeImagePath) {
-            guard let path = representativeImagePath else { palette = nil; return }
-            palette = try? await WallpaperPaletteExtractor.extractPalette(fromImageAt: path)
+        .frame(width: 60, height: 40)
+        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail))
+        .task(id: path) {
+            image = await ThumbnailCache.shared.thumbnail(for: path)
         }
     }
 }

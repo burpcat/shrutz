@@ -8,6 +8,7 @@ import SwiftUI
 /// order it to the front, every time Settings is opened.
 final class SettingsWindowController: NSWindowController {
     private var didCenter = false
+    private var hasAttachedContent = false
 
     convenience init() {
         let window = NSWindow(
@@ -23,8 +24,14 @@ final class SettingsWindowController: NSWindowController {
     }
 
     func show(appState: AppState) {
-        if window?.contentView == nil {
+        // BUG (found via user report + repro): `NSWindow(contentRect:styleMask:
+        // backing:defer:)` always creates a default, non-nil content view —
+        // `contentView == nil` is therefore NEVER true, so the real
+        // PreferencesView was never attached and the window showed its
+        // empty default view forever. Use an explicit flag instead.
+        if !hasAttachedContent {
             window?.contentView = NSHostingView(rootView: PreferencesView().environmentObject(appState))
+            hasAttachedContent = true
         }
         if !didCenter {
             window?.center()

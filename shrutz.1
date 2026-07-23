@@ -40,6 +40,22 @@ Load and start the launchd agent.
 .B shrutz stop
 Unload and stop the launchd agent.
 .TP
+.BI "shrutz autostart " "on\ |\ off\ |\ status"
+Enable or disable the daemon's LaunchAgent registration to start at
+login
+.RI ( RunAtLoad ),
+or show the current setting. This mirrors the daemon's own launchd
+registration rather than a separate app-only login item \(em since the
+daemon already launches the menu bar companion app on its own startup
+(if installed), enabling this is what makes the daemon and the app start
+together. Unlike
+.BR "shrutz start" / stop ,
+this only affects the
+.I next
+login; it does not load or unload the current session. Add
+.B \-\-json
+for machine-readable output.
+.TP
 .B shrutz log
 Stream the live activity log with
 .BR tail (1).

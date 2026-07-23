@@ -113,6 +113,9 @@ shrutz status               # check if the daemon is running
 shrutz log                  # stream the live activity log
 shrutz start                # start the daemon
 shrutz stop                 # stop the daemon
+shrutz autostart on         # start the daemon (and menu bar app) at every login
+shrutz autostart off        # disable that
+shrutz autostart status     # show whether it's currently enabled
 shrutz --version            # print the installed version
 
 # Playback

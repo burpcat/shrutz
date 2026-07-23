@@ -127,6 +127,27 @@ init_get() {
     grep "^${key}=" "$WALLPAPER_BASE/$set_name/__init__" | cut -d= -f2-
 }
 
+# Seed a minimal, valid LaunchAgent plist at the path `cmd_autostart`
+# reads/writes, with RunAtLoad set to the given bool ("true"/"false").
+seed_launchagent_plist() {
+    local run_at_load="${1:-true}"
+    mkdir -p "$TEST_HOME/Library/LaunchAgents"
+    cat > "$TEST_HOME/Library/LaunchAgents/local.shrutz.plist" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.shrutz</string>
+    <key>RunAtLoad</key>
+    <${run_at_load}/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+}
+
 # ══════════════════════════════════════════════════════════════════
 # STATE — read / write round-trip
 # ══════════════════════════════════════════════════════════════════
@@ -1313,6 +1334,90 @@ STUB
     run bash -c "source '$SHRUTZ' --help >/dev/null 2>&1; _maybe_launch_menubar_app"
     [ "$status" -eq 0 ]
     [ ! -f "$SHRUTZ_LIB/open.calls" ]
+}
+
+# ══════════════════════════════════════════════════════════════════
+# AUTOSTART
+# ══════════════════════════════════════════════════════════════════
+# Toggles the daemon LaunchAgent's RunAtLoad key — separate from whether
+# it's loaded/running right now. Never touches the current session's
+# load state (that's start/stop, already stubbed via the launchctl stub).
+
+@test "autostart status: reports on when RunAtLoad is true" {
+    seed_launchagent_plist true
+    run "$SHRUTZ" autostart status
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"is on"* ]]
+}
+
+@test "autostart status: reports off when RunAtLoad is false" {
+    seed_launchagent_plist false
+    run "$SHRUTZ" autostart status
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"is off"* ]]
+}
+
+@test "autostart status: reports off when no plist exists yet" {
+    run "$SHRUTZ" autostart status
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"is off"* ]]
+}
+
+@test "autostart on: flips RunAtLoad to true and persists it" {
+    seed_launchagent_plist false
+    run "$SHRUTZ" autostart on
+    [ "$status" -eq 0 ]
+    run "$SHRUTZ" autostart status
+    [[ "$output" == *"is on"* ]]
+}
+
+@test "autostart off: flips RunAtLoad to false and persists it" {
+    seed_launchagent_plist true
+    run "$SHRUTZ" autostart off
+    [ "$status" -eq 0 ]
+    run "$SHRUTZ" autostart status
+    [[ "$output" == *"is off"* ]]
+}
+
+@test "autostart on: dies with a clear message when no plist exists" {
+    run "$SHRUTZ" autostart on
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"run install.sh first"* ]]
+}
+
+@test "autostart --json: emits valid JSON reflecting the current state" {
+    seed_launchagent_plist true
+    run "$SHRUTZ" autostart --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['autostart_enabled'] is True, d
+"
+}
+
+@test "autostart: unknown subcommand prints usage" {
+    run "$SHRUTZ" autostart bogus
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Usage: shrutz autostart"* ]]
+}
+
+@test "autostart: does not affect the current session's loaded state" {
+    seed_launchagent_plist false
+    "$SHRUTZ" autostart on
+    # No launchctl load/unload call should have been made by autostart itself
+    [ ! -f "$SHRUTZ_LIB/launchctl.calls" ]
+}
+
+@test "status --json: includes autostart_enabled reflecting the plist" {
+    seed_launchagent_plist true
+    run "$SHRUTZ" status --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['autostart_enabled'] is True, d
+"
 }
 
 # ══════════════════════════════════════════════════════════════════

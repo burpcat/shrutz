@@ -46,10 +46,12 @@ struct DaemonStatus: Codable {
     let loaded: Bool
     let pid: Int
     let lastExitStatus: Int
+    let autostartEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case loaded, pid
         case lastExitStatus = "last_exit_status"
+        case autostartEnabled = "autostart_enabled"
     }
 }
 

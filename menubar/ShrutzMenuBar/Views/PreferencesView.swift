@@ -1,84 +1,120 @@
 import SwiftUI
 import AppKit
 
+enum SettingsTab: String, CaseIterable {
+    case general = "General"
+    case sets = "Sets"
+    case weather = "Weather"
+    case creators = "Creators Publish"
+}
+
 struct PreferencesView: View {
+    @EnvironmentObject var appState: AppState
+    @State private var selectedTab: SettingsTab = .general
+
     var body: some View {
-        TabView {
-            GeneralPreferencesView()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            SetsPreferencesView()
-                .tabItem { Label("Sets", systemImage: "photo.stack") }
-            WeatherSectionView()
-                .tabItem { Label("Weather", systemImage: "cloud.sun") }
-            GalleryView()
-                .tabItem { Label("Creators Publish", systemImage: "square.grid.2x2") }
+        ZStack {
+            FrostedTintBackground(palette: appState.wallpaperPalette, isPaused: appState.now?.paused ?? false)
+
+            VStack(spacing: 16) {
+                ShrutzWordmark(size: 22)
+                    .padding(.top, 20)
+
+                pillTabBar
+
+                Group {
+                    switch selectedTab {
+                    case .general: GeneralPreferencesView()
+                    case .sets: SetsPreferencesView()
+                    case .weather: WeatherSectionView()
+                    case .creators: GalleryView()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .padding(.bottom, 20)
         }
-        .frame(minWidth: 520, idealWidth: 620, minHeight: 420, idealHeight: 520)
-        .background(ShrutzPalette.panelBackground)
+        .frame(minWidth: 520, idealWidth: 640, minHeight: 460, idealHeight: 580)
+    }
+
+    private var pillTabBar: some View {
+        HStack(spacing: 2) {
+            ForEach(SettingsTab.allCases, id: \.self) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    Text(tab.rawValue)
+                        .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule().fill(selectedTab == tab ? Color.white.opacity(0.9) : Color.clear)
+                        )
+                        .foregroundColor(selectedTab == tab ? .black : ShrutzPalette.textPrimary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(Capsule().fill(Color.white.opacity(0.15)))
     }
 }
 
 struct GeneralPreferencesView: View {
     @EnvironmentObject var appState: AppState
-    @State private var loginItemEnabled = LoginItemManager.isEnabled
-    @AppStorage(AppDelegate.hideMenuBarIconDefaultsKey) private var hideMenuBarIcon = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                if let config = appState.config {
-                    dialsSection(config)
+            VStack(alignment: .leading, spacing: 22) {
+                launchAtLoginRow
+
+                if appState.config != nil {
+                    RotaryDurationDial(
+                        label: "Active-use time before switch",
+                        value: configBinding("ACTIVE_MINS", get: \.activeMins),
+                        range: 1...180, step: 1, unit: "min",
+                        helpText: "Minutes of actual keyboard/mouse use before the wallpaper advances — time away from the machine doesn't count."
+                    )
+                    RotaryDurationDial(
+                        label: "Idle threshold",
+                        value: configBinding("IDLE_THRESHOLD", get: \.idleThreshold),
+                        range: 5...600, step: 5, unit: "sec",
+                        helpText: "Seconds of no input before you're counted as away and the clock freezes."
+                    )
+                    RotaryDurationDial(
+                        label: "Check interval",
+                        value: configBinding("CHECK_EVERY", get: \.checkEvery),
+                        range: 5...300, step: 5, unit: "sec",
+                        helpText: "How often the daemon polls idle time and re-checks the visible wallpaper."
+                    )
                 }
-
-                Divider()
-
-                togglesSection
-
-                Divider()
-
-                wallpaperSetSection
-
-                Divider()
-
-                daemonSection
-
-                Divider()
-
-                aboutSection
             }
-            .padding(20)
+            .padding(24)
         }
     }
 
-    private func dialsSection(_ config: ShrutzConfig) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Timing").font(.shrutzSerif(16, weight: .semibold))
-            HStack(alignment: .top, spacing: 28) {
-                RotaryDurationDial(
-                    label: "Active time",
-                    value: configBinding("ACTIVE_MINS", get: \.activeMins),
-                    range: 1...180, step: 1, unit: "min",
-                    helpText: "Minutes of actual keyboard/mouse use before the wallpaper advances — time away from the machine doesn't count."
-                )
-                RotaryDurationDial(
-                    label: "Idle threshold",
-                    value: configBinding("IDLE_THRESHOLD", get: \.idleThreshold),
-                    range: 5...600, step: 5, unit: "sec",
-                    helpText: "Seconds of no input before you're counted as away and the clock freezes."
-                )
-                RotaryDurationDial(
-                    label: "Check interval",
-                    value: configBinding("CHECK_EVERY", get: \.checkEvery),
-                    range: 5...300, step: 5, unit: "sec",
-                    helpText: "How often the daemon polls idle time and re-checks the visible wallpaper."
-                )
-                RotaryDurationDial(
-                    label: "Weather poll",
-                    value: configBinding("WEATHER_POLL_MINS", get: \.weatherPollMins),
-                    range: 1...180, step: 1, unit: "min",
-                    helpText: "How often the daemon checks the weather when auto-switching is enabled."
-                )
+    private var launchAtLoginRow: some View {
+        HStack {
+            HStack(spacing: 4) {
+                Text("Launch at login")
+                    .font(.system(size: 13))
+                    .foregroundColor(ShrutzPalette.textPrimary)
+                Button {} label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12))
+                        .foregroundColor(ShrutzPalette.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .help("Starts the shrutz daemon — and this app, which the daemon launches on its own — automatically every time you log in.")
             }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { appState.daemonStatus?.autostartEnabled ?? false },
+                set: { newValue in Task { await appState.setAutostart(newValue) } }
+            ))
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .tint(ShrutzPalette.accent)
         }
     }
 
@@ -88,143 +124,132 @@ struct GeneralPreferencesView: View {
             set: { newValue in Task { await appState.setConfig(key, newValue) } }
         )
     }
-
-    private var togglesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle("Launch at Login", isOn: $loginItemEnabled)
-                .onChange(of: loginItemEnabled) { _, newValue in
-                    LoginItemManager.setEnabled(newValue)
-                }
-            Toggle("Hide menu bar icon", isOn: $hideMenuBarIcon)
-                .onChange(of: hideMenuBarIcon) { _, hidden in
-                    appState.menuBarIconController?.setStatusItemVisible(!hidden)
-                }
-            if hideMenuBarIcon {
-                Text("Relaunch Shrutz.app (Finder, Spotlight, or Launchpad) to bring the icon back.")
-                    .font(.shrutzSans(11))
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-
-    private var wallpaperSetSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Wallpaper Set").font(.shrutzSerif(16, weight: .semibold))
-            Picker("Active set", selection: Binding(
-                get: { appState.sets.first(where: { $0.active })?.name ?? "" },
-                set: { newValue in Task { await appState.switchSet(newValue) } }
-            )) {
-                ForEach(appState.sets) { set in
-                    Text(set.name).tag(set.name)
-                }
-            }
-            .labelsHidden()
-            .disabled(appState.sets.isEmpty)
-        }
-    }
-
-    private var daemonSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Daemon").font(.shrutzSerif(16, weight: .semibold))
-            HStack {
-                Text(appState.daemonStatus?.loaded == true ? "Running" : "Stopped")
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button(appState.daemonStatus?.loaded == true ? "Stop Daemon" : "Start Daemon") {
-                    Task {
-                        if appState.daemonStatus?.loaded == true {
-                            await appState.stopDaemon()
-                        } else {
-                            await appState.startDaemon()
-                        }
-                    }
-                }
-            }
-            Button("Open Dashboard in Terminal") { DashboardLauncher.openInTerminal() }
-                .disabled(!appState.shrutzInstalled)
-        }
-    }
-
-    private var aboutSection: some View {
-        HStack {
-            Button("About Shrutz") {
-                NSApplication.shared.orderFrontStandardAboutPanel(options: [:])
-            }
-            Spacer()
-            Button("Quit Shrutz") {
-                NSApplication.shared.terminate(nil)
-            }
-        }
-    }
 }
 
 struct SetsPreferencesView: View {
     @EnvironmentObject var appState: AppState
+    @State private var showingNewSetSheet = false
+    @State private var newSetName = ""
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    Spacer()
+                    Button("+ New set") { showingNewSetSheet = true }
+                        .buttonStyle(.plain)
+                        .font(.shrutzSmallCaps(15))
+                        .tracking(1.2)
+                        .foregroundColor(ShrutzPalette.accent)
+                }
+
                 if appState.sets.isEmpty {
-                    Text("No sets yet — create one from the terminal: shrutz set create <name>")
-                        .font(.shrutzSans(13))
-                        .foregroundColor(.secondary)
-                        .padding()
+                    Text("No sets yet.")
+                        .font(.system(size: 13))
+                        .foregroundColor(ShrutzPalette.textSecondary)
                 } else {
                     ForEach(appState.sets) { set in
-                        setRow(set)
+                        setCard(set)
                     }
                 }
             }
-            .padding(20)
+            .padding(24)
+        }
+        .sheet(isPresented: $showingNewSetSheet) {
+            newSetSheet
         }
     }
 
-    private func setRow(_ set: WallpaperSet) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var newSetSheet: some View {
+        VStack(spacing: 16) {
+            Text("New Set").font(.shrutzSerif(18, weight: .medium))
+            TextField("Name", text: $newSetName).textFieldStyle(.roundedBorder).frame(width: 220)
             HStack {
-                Text(set.name)
-                    .font(.shrutzSerif(20, weight: .medium))
-                    .foregroundColor(ShrutzPalette.navy)
-                if set.active {
-                    Text("active")
-                        .font(.shrutzSans(11))
-                        .foregroundColor(.secondary)
+                Button("Cancel") { showingNewSetSheet = false }
+                Button("Create") {
+                    let name = newSetName
+                    showingNewSetSheet = false
+                    newSetName = ""
+                    Task { await appState.createSet(name) }
                 }
-                Spacer()
-                Button("Switch") {
-                    Task { await appState.switchSet(set.name) }
-                }
-                .disabled(set.active)
+                .disabled(newSetName.isEmpty)
+                .buttonStyle(.borderedProminent)
+                .tint(ShrutzPalette.accent)
             }
+        }
+        .padding(24)
+    }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 10) {
-                    ForEach(set.imagePaths, id: \.self) { path in
-                        ThumbnailCell(path: path)
+    private func setCard(_ set: WallpaperSet) -> some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(set.active ? ShrutzPalette.accent : Color.clear)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(set.name)
+                        .font(.shrutzSerif(22, weight: .medium))
+                        .foregroundColor(ShrutzPalette.textPrimary)
+                    if set.active {
+                        Text("ACTIVE")
+                            .font(.shrutzSmallCaps(11))
+                            .tracking(1.5)
+                            .foregroundColor(ShrutzPalette.accent)
+                    }
+                    Spacer()
+                    Text("\(set.images) images")
+                        .font(.shrutzSmallCaps(11))
+                        .tracking(1)
+                        .foregroundColor(ShrutzPalette.textSecondary)
+                    Toggle("Shuffle", isOn: Binding(
+                        get: { set.shuffle },
+                        set: { newValue in Task { await appState.toggleShuffle(set.name, on: newValue) } }
+                    ))
+                    .tint(ShrutzPalette.accent)
+                    .toggleStyle(.switch)
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(set.imagePaths, id: \.self) { path in
+                            FilmstripThumbnail(path: path)
+                        }
                     }
                 }
             }
+            .padding(14)
+        }
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
+        .contentShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
+        .onTapGesture {
+            guard !set.active else { return }
+            Task { await appState.switchSet(set.name) }
+        }
+        .contextMenu {
+            Button("Switch to this set") { Task { await appState.switchSet(set.name) } }
+                .disabled(set.active)
+            Button("Delete", role: .destructive) { Task { await appState.deleteSet(set.name) } }
+                .disabled(set.active)
         }
     }
 }
 
-private struct ThumbnailCell: View {
+private struct FilmstripThumbnail: View {
     let path: String
     @State private var image: NSImage?
 
     var body: some View {
         Group {
             if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
+                Image(nsImage: image).resizable().scaledToFill()
             } else {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(ShrutzPalette.controlBackground)
+                Shimmer()
             }
         }
-        .frame(width: 96, height: 64)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .frame(width: 72, height: 48)
+        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail))
         .task(id: path) {
             image = await ThumbnailCache.shared.thumbnail(for: path)
         }

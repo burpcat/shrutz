@@ -20,7 +20,6 @@
 		519170612BB1A3DF15F8B9FE /* ShrutzStatusMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31A6DC8C49FFC8BFC00893B /* ShrutzStatusMark.swift */; };
 		524ADA93D0D59DFEB3CF68C5 /* PanelWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A9719A221EF21CBF315A710 /* PanelWindowController.swift */; };
 		7B4420EE9648802F23D441D3 /* ShrutzPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */; };
-		7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFD238900D6BD207D99599C /* LoginItemManager.swift */; };
 		7F878401F8867E162D3079C3 /* ShrutzState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C69135962231ACE365BD7B /* ShrutzState.swift */; };
 		81B4291223E84B4CE2C3A034 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6E8E3F444DBA94FA246EE6 /* AppDelegate.swift */; };
 		89789BAC0B38CEA2C34D1BCB /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = 0F48B440E904453D0BB75543 /* Fonts */; };
@@ -32,6 +31,7 @@
 		D279C0BEFF23D240CDC8A6A3 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13BB02295ED61AC05180E70C /* AppState.swift */; };
 		EB0597EDEBD2262087BF475E /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99C1887C31A081D4F2E5162 /* PreferencesView.swift */; };
 		F365B06C2185BFF43D4D0D71 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7DFC5EEA812710547EA6A34 /* SettingsWindowController.swift */; };
+		F650B6C5443C478CB701B01B /* Shimmer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D5E793EB8A212560E0E0CCF /* Shimmer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +40,7 @@
 		17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzMenuBarApp.swift; sourceTree = "<group>"; };
 		19D5315FCE810C71B845122D /* ThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCache.swift; sourceTree = "<group>"; };
 		1A033DDC69A4668E798FAE76 /* DashboardLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardLauncher.swift; sourceTree = "<group>"; };
+		1D5E793EB8A212560E0E0CCF /* Shimmer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shimmer.swift; sourceTree = "<group>"; };
 		48A5AEC7B3846ABB4DE87BC6 /* FrostedTintBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrostedTintBackground.swift; sourceTree = "<group>"; };
 		4A9719A221EF21CBF315A710 /* PanelWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelWindowController.swift; sourceTree = "<group>"; };
 		6229F6560282793F60D3F218 /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
@@ -59,7 +60,6 @@
 		B02EBECA68D598DEB5F5A62E /* ShrutzPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzPalette.swift; sourceTree = "<group>"; };
 		B7DFC5EEA812710547EA6A34 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		C99C1887C31A081D4F2E5162 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
-		ECFD238900D6BD207D99599C /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
 		FC6FC8DCD6A43071969CCCCA /* ShrutzMenuBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShrutzMenuBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -102,7 +102,6 @@
 			isa = PBXGroup;
 			children = (
 				1A033DDC69A4668E798FAE76 /* DashboardLauncher.swift */,
-				ECFD238900D6BD207D99599C /* LoginItemManager.swift */,
 				A0AD80D4E7442CBA36540970 /* RemoteThumbnailCache.swift */,
 				77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */,
 				9340E3B495901BC7A39FB513 /* StateWatcher.swift */,
@@ -119,6 +118,7 @@
 				6229F6560282793F60D3F218 /* GalleryView.swift */,
 				C99C1887C31A081D4F2E5162 /* PreferencesView.swift */,
 				625F8E5FFF44CFE406F15ABE /* RotaryDurationDial.swift */,
+				1D5E793EB8A212560E0E0CCF /* Shimmer.swift */,
 				7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */,
 				A31A6DC8C49FFC8BFC00893B /* ShrutzStatusMark.swift */,
 				9D429AB3DE05CAA1248CFB66 /* ShrutzWordmark.swift */,
@@ -144,7 +144,7 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
-		"TEMP_42B3C96D-19E3-45FB-9A0E-AC63C1308CAC" /* Resources */ = {
+		"TEMP_79996B82-E7E1-4690-A770-37EF849D59BE" /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -228,12 +228,12 @@
 				0848B2831DB28BC50D9D11DF /* DashboardLauncher.swift in Sources */,
 				2314AEECF4A8566775EFA6A1 /* FrostedTintBackground.swift in Sources */,
 				36DAA64FB2302891805C0CFA /* GalleryView.swift in Sources */,
-				7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */,
 				524ADA93D0D59DFEB3CF68C5 /* PanelWindowController.swift in Sources */,
 				EB0597EDEBD2262087BF475E /* PreferencesView.swift in Sources */,
 				95CE53E6B9AF2009F9BFA39E /* RemoteThumbnailCache.swift in Sources */,
 				3AC291E8AD4157ED70225CB0 /* RotaryDurationDial.swift in Sources */,
 				F365B06C2185BFF43D4D0D71 /* SettingsWindowController.swift in Sources */,
+				F650B6C5443C478CB701B01B /* Shimmer.swift in Sources */,
 				37E2354EFF9A6A48FFDCDB29 /* ShrutzCLI.swift in Sources */,
 				CF5F31E06FC1126A8B005B83 /* ShrutzMenuBarApp.swift in Sources */,
 				28A462830C2E183D75C30BB6 /* ShrutzPalette.swift in Sources */,

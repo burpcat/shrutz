@@ -3,12 +3,25 @@ import ImageIO
 import CoreGraphics
 import SwiftUI
 
-/// A small, cheap palette derived from a wallpaper image — the pure-app-side
-/// "chrome" rendering half of the tinting engine (per this project's rule
-/// that colour extraction/tinting live in Swift, while *which* wallpaper is
-/// current comes from the CLI's JSON).
+/// A small, spatially-ordered palette derived from a wallpaper image — the
+/// pure-app-side "chrome" rendering half of the tinting engine (per this
+/// project's rule that colour extraction/tinting live in Swift, while
+/// *which* wallpaper is current comes from the CLI's JSON).
+///
+/// `colors` is always 5 entries in a fixed spatial order — topLeft,
+/// topRight, bottomLeft, bottomRight, center — so the ambient mesh's blobs
+/// can be positioned to match where those tones actually sit in the real
+/// wallpaper, instead of just being "the N most frequent colors" (which
+/// tends to collapse photos into one muddy midtone and loses the spatial
+/// variation that makes a gradient mesh read as a mesh).
 struct WallpaperPalette: Equatable {
     let colors: [Color]
+
+    var topLeft: Color { colors[0] }
+    var topRight: Color { colors[1] }
+    var bottomLeft: Color { colors[2] }
+    var bottomRight: Color { colors[3] }
+    var center: Color { colors[4] }
 }
 
 enum PaletteError: Error {
@@ -16,22 +29,17 @@ enum PaletteError: Error {
 }
 
 enum WallpaperPaletteExtractor {
-    /// Downsamples the image at `path` to a tiny thumbnail (native, cheap —
-    /// never decodes the full-resolution source) and extracts a handful of
-    /// dominant colors via histogram bucketing: quantize each pixel's R/G/B
-    /// into a small number of levels, tally frequency per bucket, and return
-    /// the most frequent buckets' *averaged actual pixel colors* (not the
-    /// quantized bucket center, which would look flat/banded).
-    ///
-    /// Histogram bucketing over k-means: deterministic, no iteration, no
-    /// dependency, cheap enough to run on every wallpaper switch.
-    static func extractPalette(fromImageAt path: String, resultCount: Int = 4) async throws -> WallpaperPalette {
+    /// Downsamples the image at `path` to a tiny grid (native, cheap —
+    /// never decodes the full-resolution source) and averages each of 5
+    /// regions (four quadrants + center) into a color, preserving the
+    /// wallpaper's actual spatial color layout.
+    static func extractPalette(fromImageAt path: String) async throws -> WallpaperPalette {
         try Task.checkCancellation()
-        guard let cgImage = downsample(path: path, maxPixelSize: 24) else {
+        guard let cgImage = downsample(path: path, maxPixelSize: 32) else {
             throw PaletteError.decodeFailed
         }
         try Task.checkCancellation()
-        return histogramPalette(from: cgImage, bucketsPerChannel: 4, resultCount: resultCount)
+        return spatialPalette(from: cgImage)
     }
 
     private static func downsample(path: String, maxPixelSize: Int) -> CGImage? {
@@ -46,11 +54,11 @@ enum WallpaperPaletteExtractor {
         return CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
     }
 
-    private static func histogramPalette(from cgImage: CGImage, bucketsPerChannel: Int, resultCount: Int) -> WallpaperPalette {
+    private static func spatialPalette(from cgImage: CGImage) -> WallpaperPalette {
         let width = cgImage.width
         let height = cgImage.height
-        guard width > 0, height > 0 else {
-            return WallpaperPalette(colors: [Color.gray])
+        guard width > 1, height > 1 else {
+            return WallpaperPalette(colors: Array(repeating: Color.gray, count: 5))
         }
 
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -64,53 +72,43 @@ enum WallpaperPaletteExtractor {
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else {
-            return WallpaperPalette(colors: [Color.gray])
+            return WallpaperPalette(colors: Array(repeating: Color.gray, count: 5))
         }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        struct Bucket {
-            var count = 0
-            var rSum = 0, gSum = 0, bSum = 0
-        }
-        var buckets: [Int: Bucket] = [:]
-        let levels = bucketsPerChannel
-        let step = 256 / levels
-
-        var i = 0
-        while i < pixels.count {
-            let r = Int(pixels[i])
-            let g = Int(pixels[i + 1])
-            let b = Int(pixels[i + 2])
-            let a = pixels[i + 3]
-            i += 4
-            guard a > 16 else { continue }  // skip near-transparent pixels
-
-            let rBucket = min(levels - 1, r / step)
-            let gBucket = min(levels - 1, g / step)
-            let bBucket = min(levels - 1, b / step)
-            let key = (rBucket * levels + gBucket) * levels + bBucket
-
-            var bucket = buckets[key] ?? Bucket()
-            bucket.count += 1
-            bucket.rSum += r
-            bucket.gSum += g
-            bucket.bSum += b
-            buckets[key] = bucket
-        }
-
-        guard !buckets.isEmpty else {
-            return WallpaperPalette(colors: [Color.gray])
-        }
-
-        let topBuckets = buckets.values.sorted { $0.count > $1.count }.prefix(resultCount)
-        let colors = topBuckets.map { bucket -> Color in
-            let n = Double(bucket.count)
+        func averageColor(xRange: Range<Int>, yRange: Range<Int>) -> Color {
+            var rSum = 0, gSum = 0, bSum = 0, count = 0
+            for y in yRange {
+                for x in xRange {
+                    let i = (y * width + x) * 4
+                    rSum += Int(pixels[i])
+                    gSum += Int(pixels[i + 1])
+                    bSum += Int(pixels[i + 2])
+                    count += 1
+                }
+            }
+            guard count > 0 else { return .gray }
             return Color(
-                red: Double(bucket.rSum) / n / 255,
-                green: Double(bucket.gSum) / n / 255,
-                blue: Double(bucket.bSum) / n / 255
+                red: Double(rSum) / Double(count) / 255,
+                green: Double(gSum) / Double(count) / 255,
+                blue: Double(bSum) / Double(count) / 255
             )
         }
-        return WallpaperPalette(colors: colors.isEmpty ? [Color.gray] : colors)
+
+        let midX = width / 2
+        let midY = height / 2
+        let quarterW = max(1, width / 4)
+        let quarterH = max(1, height / 4)
+
+        let topLeft = averageColor(xRange: 0..<midX, yRange: 0..<midY)
+        let topRight = averageColor(xRange: midX..<width, yRange: 0..<midY)
+        let bottomLeft = averageColor(xRange: 0..<midX, yRange: midY..<height)
+        let bottomRight = averageColor(xRange: midX..<width, yRange: midY..<height)
+        let center = averageColor(
+            xRange: max(0, midX - quarterW)..<min(width, midX + quarterW),
+            yRange: max(0, midY - quarterH)..<min(height, midY + quarterH)
+        )
+
+        return WallpaperPalette(colors: [topLeft, topRight, bottomLeft, bottomRight, center])
     }
 }

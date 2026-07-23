@@ -10,10 +10,30 @@ extension Color {
     }
 }
 
-/// The app-wide cream/navy palette — originally scoped to just the panel
-/// dropdown, now shared across Settings too for one coherent visual system.
+/// Hard design tokens from the approved mockups (Appendix A) — every
+/// surface is ambient frosted glass over a wallpaper-derived color mesh,
+/// with a single red accent. No blue anywhere; toggles/accents use red
+/// when "on", never the system blue.
 enum ShrutzPalette {
-    static let panelBackground = Color(hex: 0xFBF8F1)
-    static let controlBackground = Color(hex: 0xEEEAE5)
-    static let navy = Color(hex: 0x3E4A5C)
+    /// The one accent color: crossed "z", pause circle, download buttons,
+    /// dial arc, active-set edge, unload control.
+    static let accent = Color(hex: 0xE5342B)
+
+    /// Wordmark body color on tinted/dark glass.
+    static let wordmarkLight = Color(hex: 0xF5F1EC)
+    /// Wordmark body color on the light glass variant.
+    static let wordmarkDark = Color(hex: 0x1A1A1A)
+
+    /// Primary text on glass (~90% white).
+    static let textPrimary = Color.white.opacity(0.9)
+    /// Secondary/label text on glass (~60% white).
+    static let textSecondary = Color.white.opacity(0.6)
+
+    /// Flat, fully desaturated glass tone while rotation is paused.
+    static let pausedGlass = Color(hex: 0xC9C7C4)
+
+    static let cornerRadiusPopover: CGFloat = 28
+    static let cornerRadiusWindow: CGFloat = 20
+    static let cornerRadiusCard: CGFloat = 16
+    static let cornerRadiusThumbnail: CGFloat = 13
 }
