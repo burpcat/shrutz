@@ -67,6 +67,20 @@ and, on confirmation, quits the app if it's running and removes
 If "Launch at Login" had been enabled from the app's own Preferences,
 macOS may still show a stale Login Items entry afterward \(em remove it
 manually from System Settings \(-> General \(-> Login Items.
+.PP
+Once installed, the daemon itself launches
+.I Shrutz.app
+automatically at startup whenever it isn't already running \(em
+including every automatic restart triggered by
+.BR "shrutz switch" ,
+.BR "shrutz set rename/shuffle" ,
+.BR "shrutz config" ,
+and the
+.B shrutz weather
+mutators. Launched in the background
+.RI ( "open \-g" )
+so it never steals focus. Nothing happens if the app was never
+installed.
 .TP
 .BR "shrutz \-v" ", " "shrutz \-\-version"
 Print the installed version, read from
@@ -123,9 +137,14 @@ Create a new wallpaper set. If
 is provided, images from that path are imported into the new set
 immediately.
 .TP
-.BI "shrutz set delete " name
+.BI "shrutz set delete " "name " [ \-y | \-\-yes ]
 Delete a wallpaper set and all its images after a confirmation prompt.
-The active set cannot be deleted; switch to another set first.
+The active set cannot be deleted; switch to another set first. Pass
+.B \-y
+or
+.B \-\-yes
+to skip the confirmation prompt \(em for scripted or GUI-driven use
+(e.g. the menu bar app's own confirmation dialog standing in for it).
 .TP
 .BI "shrutz set rename " "old new"
 Rename a wallpaper set. If the renamed set is currently active,

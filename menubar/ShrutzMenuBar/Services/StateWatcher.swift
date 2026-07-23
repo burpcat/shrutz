@@ -16,6 +16,7 @@ final class StateWatcher {
     private var fileDescriptor: Int32 = -1
     private var pollTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
+    private var currentInterval: TimeInterval = 15
 
     var onChange: (() -> Void)?
 
@@ -25,14 +26,28 @@ final class StateWatcher {
 
     func start() {
         watchStateFile()
-
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            self?.onChange?()
-        }
+        schedulePoll(interval: currentInterval)
 
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
+            self?.onChange?()
+        }
+    }
+
+    /// AppState switches this to a faster cadence while it suspects the
+    /// daemon may be down, so its ~5-10s quit-grace-window is actually
+    /// resolved promptly rather than waiting on the lazy default poll.
+    func setFastPolling(_ fast: Bool) {
+        let target: TimeInterval = fast ? 2 : 15
+        guard target != currentInterval else { return }
+        currentInterval = target
+        schedulePoll(interval: target)
+    }
+
+    private func schedulePoll(interval: TimeInterval) {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.onChange?()
         }
     }

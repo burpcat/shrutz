@@ -218,6 +218,55 @@ assert 'condition' in d
 assert 'temperature_f' in d
 assert 'auto_switch' in d
 assert 'last_checked' in d
+assert d['mappings'] == []
+"
+}
+
+@test "weather --json: mappings field reflects configured condition→set mappings" {
+    _make_set rainy
+    _make_set sunny
+    "$SHRUTZ" weather location "42.36,-71.06"
+    "$SHRUTZ" weather map rain rainy
+    "$SHRUTZ" weather map clear sunny
+    "$SHRUTZ" weather on
+    run "$SHRUTZ" weather --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+mappings = {m['condition']: m['set'] for m in d['mappings']}
+assert mappings == {'rain': 'rainy', 'clear': 'sunny'}, d
+"
+}
+
+@test "weather --json: unmapped conditions are simply absent from mappings" {
+    _make_set rainy
+    "$SHRUTZ" weather location "42.36,-71.06"
+    "$SHRUTZ" weather map rain rainy
+    "$SHRUTZ" weather on
+    run "$SHRUTZ" weather --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+conditions = {m['condition'] for m in d['mappings']}
+assert conditions == {'rain'}
+assert 'snow' not in conditions
+"
+}
+
+@test "weather --json: mappings reflect removal after unmap" {
+    _make_set rainy
+    "$SHRUTZ" weather location "42.36,-71.06"
+    "$SHRUTZ" weather map rain rainy
+    "$SHRUTZ" weather on
+    "$SHRUTZ" weather unmap rain
+    run "$SHRUTZ" weather --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['mappings'] == [], d
 "
 }
 

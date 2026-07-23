@@ -139,6 +139,34 @@ assert names['default']['active'] is False
 "
 }
 
+@test "sets --json: image_paths lists absolute file paths in sorted order" {
+    run "$SHRUTZ" sets --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+names = {e['name']: e for e in d}
+nature = names['nature']
+assert nature['images'] == len(nature['image_paths']) == 3, nature
+assert nature['image_paths'][0].endswith('/nature/a.jpg'), nature
+assert nature['image_paths'][1].endswith('/nature/b.jpg'), nature
+assert nature['image_paths'][2].endswith('/nature/c.jpg'), nature
+assert all(p.startswith('/') for p in nature['image_paths'])
+"
+}
+
+@test "sets --json: image_paths is an empty array for a set with no images" {
+    run "$SHRUTZ" sets --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+names = {e['name']: e for e in d}
+assert names['default']['image_paths'] == []
+assert names['default']['images'] == 0
+"
+}
+
 # ── status --json ───────────────────────────────────────────────
 
 @test "status --json: reports not loaded when the agent isn't running" {

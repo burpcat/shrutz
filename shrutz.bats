@@ -69,6 +69,14 @@ STUB
 echo "HIDIdleTime = 999999999999"
 STUB
 
+    # open — _maybe_launch_menubar_app(); record calls instead of really
+    # launching anything.
+    cat > "$STUB_DIR/open" << 'STUB'
+#!/usr/bin/env bash
+echo "open $*" >> "$HOME/.local/lib/shrutz/open.calls"
+exit 0
+STUB
+
     chmod +x "$STUB_DIR"/*
     export PATH="$STUB_DIR:$PATH"
 
@@ -260,6 +268,36 @@ STATE
     run "$SHRUTZ" set delete
     [ "$status" -ne 0 ]
     [[ "$output" == *"Usage"* ]]
+}
+
+@test "set delete: -y skips the confirmation prompt entirely" {
+    "$SHRUTZ" set create old
+    touch "$WALLPAPER_BASE/old/wall.png"
+    run "$SHRUTZ" set delete old -y
+    [ "$status" -eq 0 ]
+    [ ! -d "$WALLPAPER_BASE/old" ]
+    [[ "$output" != *"[y/N]"* ]]
+}
+
+@test "set delete: --yes is a synonym for -y" {
+    "$SHRUTZ" set create old
+    run "$SHRUTZ" set delete old --yes
+    [ "$status" -eq 0 ]
+    [ ! -d "$WALLPAPER_BASE/old" ]
+}
+
+@test "set delete: -y still refuses to delete the active set" {
+    run "$SHRUTZ" set delete default -y
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"cannot delete"* ]]
+    [ -d "$WALLPAPER_BASE/default" ]
+}
+
+@test "set delete: -y does not block on stdin (proves the prompt was actually skipped, not just answered EOF/no)" {
+    "$SHRUTZ" set create old
+    run bash -c "'$SHRUTZ' set delete old -y < /dev/null"
+    [ "$status" -eq 0 ]
+    [ ! -d "$WALLPAPER_BASE/old" ]
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -1235,6 +1273,46 @@ STATE
     [ "$status" -eq 0 ]
     [[ "$output" == *"removing"* ]]
     [ ! -d "$TEST_HOME/Applications/Shrutz.app" ]
+}
+
+# ══════════════════════════════════════════════════════════════════
+# DAEMON — MENUBAR AUTO-LAUNCH
+# ══════════════════════════════════════════════════════════════════
+# _maybe_launch_menubar_app() is called once from run_daemon() at
+# startup. run_daemon() itself loops forever and is never invoked
+# directly in this suite (same reason cmd_update's `git pull` and
+# menubar install's `xcodebuild` are never exercised) — instead we
+# source the script (which just re-defines every function and then
+# runs the dispatch `case` for a harmless subcommand) and call the
+# function directly.
+
+@test "_maybe_launch_menubar_app: does nothing when the app isn't installed" {
+    run bash -c "source '$SHRUTZ' --help >/dev/null 2>&1; _maybe_launch_menubar_app"
+    [ "$status" -eq 0 ]
+    [ ! -f "$SHRUTZ_LIB/open.calls" ]
+}
+
+@test "_maybe_launch_menubar_app: launches the app when installed and not running" {
+    mkdir -p "$TEST_HOME/Applications/Shrutz.app/Contents/MacOS"
+    run bash -c "source '$SHRUTZ' --help >/dev/null 2>&1; _maybe_launch_menubar_app"
+    [ "$status" -eq 0 ]
+    [ -f "$SHRUTZ_LIB/open.calls" ]
+    grep -q -- '-g' "$SHRUTZ_LIB/open.calls"
+    grep -q "Shrutz.app" "$SHRUTZ_LIB/open.calls"
+}
+
+@test "_maybe_launch_menubar_app: does not relaunch when already running" {
+    mkdir -p "$TEST_HOME/Applications/Shrutz.app/Contents/MacOS"
+    cat > "$STUB_DIR/pgrep" << 'STUB'
+#!/usr/bin/env bash
+echo 4242
+exit 0
+STUB
+    chmod +x "$STUB_DIR/pgrep"
+
+    run bash -c "source '$SHRUTZ' --help >/dev/null 2>&1; _maybe_launch_menubar_app"
+    [ "$status" -eq 0 ]
+    [ ! -f "$SHRUTZ_LIB/open.calls" ]
 }
 
 # ══════════════════════════════════════════════════════════════════
