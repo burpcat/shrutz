@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.4.0
+
+**Menu bar app: ground-up visual and interaction redesign.** The dropdown is now a compact "now-playing"-style frosted card, tinted live from the current wallpaper's own colors (a native, cheap dominant-color extraction — re-tints on switch, settles to a calm grey while paused). Content is deliberately minimal: the "Shrutz" wordmark (with a hand-drawn crossed z, matching the brand mark), a settings button, and playback controls — no status text, no set picker, no other chrome. Typography moves to a bundled old-style serif (Cormorant Garamond) for headings/wordmark and a companion sans (Libre Franklin) for dense UI, both OFL and embedded in the app bundle. Settings gained: an always-on-top window (fixing a bug where it could open behind the frontmost app), a tactile rotary dial for every duration setting (with an info popover explaining each one), an editorial Sets browser with lazily-loaded, bounded, cancellable thumbnails, a two-step Weather flow (an enable prompt, then a weather-tinted condition-to-set mapping editor), a two-step Creators Publish flow (a disclaimer, then a gallery styled like the Sets tab, with the ability to unload installed sets), and a menu-bar-icon hide toggle (recoverable by relaunching the app). The app and daemon now start each other: an installed menu bar app launches automatically whenever the daemon starts and it isn't already running, and the app itself quits shortly after the daemon has been genuinely stopped (debounced so a normal restart-on-config-change never triggers it).
+
+**`shrutz sets --json` now includes `image_paths`.** An array of every image's absolute path in the set, in the same order/count as the existing `images` field — powers the menu bar app's lazy thumbnail grid.
+
+**`shrutz weather --json` now includes `mappings`.** The full condition→set mapping table as structured data (previously only available as human-readable text), so the menu bar app can render and edit it directly.
+
+**`shrutz set delete` gained `-y`/`--yes`.** Skips the interactive confirmation prompt, for scripted or GUI-driven callers that provide their own confirmation.
+
+## v2.3.1
+
+**`shrutz dieanddontcomeback --ever` now also removes the menu bar app.** The full wipe previously left `~/Applications/Shrutz.app` behind entirely untouched. It now quits and removes it too (sharing the same logic `menubar uninstall` uses), with the same note about a possible stale Login Items entry.
+
 ## v2.3.0
 
 **`shrutz menubar uninstall`.** Counterpart to `shrutz menubar install` — prompts `really?`, quits the app if it's running, and removes `~/Applications/Shrutz.app`. Reports cleanly if the app isn't installed rather than prompting for nothing to do. Notes that a "Launch at Login" registration may leave a stale Login Items entry macOS itself has no CLI-triggerable way to remove.

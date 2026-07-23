@@ -7,29 +7,57 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04086F78DDB75F34B0FE94D3 /* WallpaperPaletteExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF436D10FBA1F60396D4805 /* WallpaperPaletteExtractor.swift */; };
+		0848B2831DB28BC50D9D11DF /* DashboardLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A033DDC69A4668E798FAE76 /* DashboardLauncher.swift */; };
 		16EA2FA3742626AA1917DF50 /* WeatherSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */; };
+		2314AEECF4A8566775EFA6A1 /* FrostedTintBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48A5AEC7B3846ABB4DE87BC6 /* FrostedTintBackground.swift */; };
+		28A462830C2E183D75C30BB6 /* ShrutzPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B02EBECA68D598DEB5F5A62E /* ShrutzPalette.swift */; };
+		2EA9FCAE9857E1E58B6C80E8 /* ShrutzWordmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D429AB3DE05CAA1248CFB66 /* ShrutzWordmark.swift */; };
 		36DAA64FB2302891805C0CFA /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6229F6560282793F60D3F218 /* GalleryView.swift */; };
 		37E2354EFF9A6A48FFDCDB29 /* ShrutzCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */; };
+		3AC291E8AD4157ED70225CB0 /* RotaryDurationDial.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625F8E5FFF44CFE406F15ABE /* RotaryDurationDial.swift */; };
 		3B641451E9E6C50F0CDEDBC8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */; };
+		519170612BB1A3DF15F8B9FE /* ShrutzStatusMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = A31A6DC8C49FFC8BFC00893B /* ShrutzStatusMark.swift */; };
+		524ADA93D0D59DFEB3CF68C5 /* PanelWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A9719A221EF21CBF315A710 /* PanelWindowController.swift */; };
 		7B4420EE9648802F23D441D3 /* ShrutzPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */; };
 		7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFD238900D6BD207D99599C /* LoginItemManager.swift */; };
 		7F878401F8867E162D3079C3 /* ShrutzState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C69135962231ACE365BD7B /* ShrutzState.swift */; };
+		81B4291223E84B4CE2C3A034 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6E8E3F444DBA94FA246EE6 /* AppDelegate.swift */; };
+		89789BAC0B38CEA2C34D1BCB /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = 0F48B440E904453D0BB75543 /* Fonts */; };
+		8B96CC9FBAE718B34B860CAF /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD44F33206B876B61BB8445D /* Typography.swift */; };
+		95CE53E6B9AF2009F9BFA39E /* RemoteThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0AD80D4E7442CBA36540970 /* RemoteThumbnailCache.swift */; };
 		A333985F01493AC4B26751B5 /* StateWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9340E3B495901BC7A39FB513 /* StateWatcher.swift */; };
 		CF5F31E06FC1126A8B005B83 /* ShrutzMenuBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */; };
+		D054A0743DE45FFCE5DF4BAA /* ThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D5315FCE810C71B845122D /* ThumbnailCache.swift */; };
 		D279C0BEFF23D240CDC8A6A3 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13BB02295ED61AC05180E70C /* AppState.swift */; };
 		EB0597EDEBD2262087BF475E /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99C1887C31A081D4F2E5162 /* PreferencesView.swift */; };
+		F365B06C2185BFF43D4D0D71 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7DFC5EEA812710547EA6A34 /* SettingsWindowController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0F48B440E904453D0BB75543 /* Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fonts; path = ShrutzMenuBar/Resources/Fonts; sourceTree = SOURCE_ROOT; };
 		13BB02295ED61AC05180E70C /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzMenuBarApp.swift; sourceTree = "<group>"; };
+		19D5315FCE810C71B845122D /* ThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCache.swift; sourceTree = "<group>"; };
+		1A033DDC69A4668E798FAE76 /* DashboardLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardLauncher.swift; sourceTree = "<group>"; };
+		48A5AEC7B3846ABB4DE87BC6 /* FrostedTintBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrostedTintBackground.swift; sourceTree = "<group>"; };
+		4A9719A221EF21CBF315A710 /* PanelWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelWindowController.swift; sourceTree = "<group>"; };
 		6229F6560282793F60D3F218 /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
+		625F8E5FFF44CFE406F15ABE /* RotaryDurationDial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotaryDurationDial.swift; sourceTree = "<group>"; };
 		77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzCLI.swift; sourceTree = "<group>"; };
 		7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzPanelView.swift; sourceTree = "<group>"; };
 		89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		8B6E8E3F444DBA94FA246EE6 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		9340E3B495901BC7A39FB513 /* StateWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateWatcher.swift; sourceTree = "<group>"; };
 		9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherSectionView.swift; sourceTree = "<group>"; };
+		9D429AB3DE05CAA1248CFB66 /* ShrutzWordmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzWordmark.swift; sourceTree = "<group>"; };
+		9DF436D10FBA1F60396D4805 /* WallpaperPaletteExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperPaletteExtractor.swift; sourceTree = "<group>"; };
+		A0AD80D4E7442CBA36540970 /* RemoteThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteThumbnailCache.swift; sourceTree = "<group>"; };
+		A31A6DC8C49FFC8BFC00893B /* ShrutzStatusMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzStatusMark.swift; sourceTree = "<group>"; };
 		A3C69135962231ACE365BD7B /* ShrutzState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzState.swift; sourceTree = "<group>"; };
+		AD44F33206B876B61BB8445D /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
+		B02EBECA68D598DEB5F5A62E /* ShrutzPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShrutzPalette.swift; sourceTree = "<group>"; };
+		B7DFC5EEA812710547EA6A34 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		C99C1887C31A081D4F2E5162 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		ECFD238900D6BD207D99599C /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
 		FC6FC8DCD6A43071969CCCCA /* ShrutzMenuBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShrutzMenuBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -50,6 +78,9 @@
 				13BB02295ED61AC05180E70C /* AppState.swift */,
 				89CEF64F8C0E2E308C4C2379 /* Assets.xcassets */,
 				17D2CFD9B8D264086A3592B9 /* ShrutzMenuBarApp.swift */,
+				B02EBECA68D598DEB5F5A62E /* ShrutzPalette.swift */,
+				AD44F33206B876B61BB8445D /* Typography.swift */,
+				8B4209BE8DDB15BE10CD4DBC /* App */,
 				ECD4C8FA0609752AA71DA8B9 /* Models */,
 				8B7BBAA91861DA5E3BD9F70C /* Services */,
 				9A23D7387E701F0D6D0C591B /* Views */,
@@ -57,12 +88,26 @@
 			path = ShrutzMenuBar;
 			sourceTree = "<group>";
 		};
+		8B4209BE8DDB15BE10CD4DBC /* App */ = {
+			isa = PBXGroup;
+			children = (
+				8B6E8E3F444DBA94FA246EE6 /* AppDelegate.swift */,
+				4A9719A221EF21CBF315A710 /* PanelWindowController.swift */,
+				B7DFC5EEA812710547EA6A34 /* SettingsWindowController.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
 		8B7BBAA91861DA5E3BD9F70C /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				1A033DDC69A4668E798FAE76 /* DashboardLauncher.swift */,
 				ECFD238900D6BD207D99599C /* LoginItemManager.swift */,
+				A0AD80D4E7442CBA36540970 /* RemoteThumbnailCache.swift */,
 				77463A9F8AE0E9DA1EB187C3 /* ShrutzCLI.swift */,
 				9340E3B495901BC7A39FB513 /* StateWatcher.swift */,
+				19D5315FCE810C71B845122D /* ThumbnailCache.swift */,
+				9DF436D10FBA1F60396D4805 /* WallpaperPaletteExtractor.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -70,9 +115,13 @@
 		9A23D7387E701F0D6D0C591B /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				48A5AEC7B3846ABB4DE87BC6 /* FrostedTintBackground.swift */,
 				6229F6560282793F60D3F218 /* GalleryView.swift */,
 				C99C1887C31A081D4F2E5162 /* PreferencesView.swift */,
+				625F8E5FFF44CFE406F15ABE /* RotaryDurationDial.swift */,
 				7A9DAF5D413102D9106C1508 /* ShrutzPanelView.swift */,
+				A31A6DC8C49FFC8BFC00893B /* ShrutzStatusMark.swift */,
+				9D429AB3DE05CAA1248CFB66 /* ShrutzWordmark.swift */,
 				9C7815FAB8B7F2EF781F4525 /* WeatherSectionView.swift */,
 			);
 			path = Views;
@@ -81,6 +130,7 @@
 		EAC71939E7736663C4C4E77C = {
 			isa = PBXGroup;
 			children = (
+				0F48B440E904453D0BB75543 /* Fonts */,
 				368B86832D83B7E22C964AA9 /* ShrutzMenuBar */,
 				1CD4F9627F794C3D26177E0D /* Products */,
 			);
@@ -92,6 +142,13 @@
 				A3C69135962231ACE365BD7B /* ShrutzState.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		"TEMP_42B3C96D-19E3-45FB-9A0E-AC63C1308CAC" /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -155,6 +212,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3B641451E9E6C50F0CDEDBC8 /* Assets.xcassets in Resources */,
+				89789BAC0B38CEA2C34D1BCB /* Fonts in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,15 +223,28 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				81B4291223E84B4CE2C3A034 /* AppDelegate.swift in Sources */,
 				D279C0BEFF23D240CDC8A6A3 /* AppState.swift in Sources */,
+				0848B2831DB28BC50D9D11DF /* DashboardLauncher.swift in Sources */,
+				2314AEECF4A8566775EFA6A1 /* FrostedTintBackground.swift in Sources */,
 				36DAA64FB2302891805C0CFA /* GalleryView.swift in Sources */,
 				7BC3FC57313B0343C00470DB /* LoginItemManager.swift in Sources */,
+				524ADA93D0D59DFEB3CF68C5 /* PanelWindowController.swift in Sources */,
 				EB0597EDEBD2262087BF475E /* PreferencesView.swift in Sources */,
+				95CE53E6B9AF2009F9BFA39E /* RemoteThumbnailCache.swift in Sources */,
+				3AC291E8AD4157ED70225CB0 /* RotaryDurationDial.swift in Sources */,
+				F365B06C2185BFF43D4D0D71 /* SettingsWindowController.swift in Sources */,
 				37E2354EFF9A6A48FFDCDB29 /* ShrutzCLI.swift in Sources */,
 				CF5F31E06FC1126A8B005B83 /* ShrutzMenuBarApp.swift in Sources */,
+				28A462830C2E183D75C30BB6 /* ShrutzPalette.swift in Sources */,
 				7B4420EE9648802F23D441D3 /* ShrutzPanelView.swift in Sources */,
 				7F878401F8867E162D3079C3 /* ShrutzState.swift in Sources */,
+				519170612BB1A3DF15F8B9FE /* ShrutzStatusMark.swift in Sources */,
+				2EA9FCAE9857E1E58B6C80E8 /* ShrutzWordmark.swift in Sources */,
 				A333985F01493AC4B26751B5 /* StateWatcher.swift in Sources */,
+				D054A0743DE45FFCE5DF4BAA /* ThumbnailCache.swift in Sources */,
+				8B96CC9FBAE718B34B860CAF /* Typography.swift in Sources */,
+				04086F78DDB75F34B0FE94D3 /* WallpaperPaletteExtractor.swift in Sources */,
 				16EA2FA3742626AA1917DF50 /* WeatherSectionView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

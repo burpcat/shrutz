@@ -560,6 +560,8 @@ _weather_maybe_check() {
 run_daemon() {
     load_state
 
+    _maybe_launch_menubar_app
+
     # Rebuild or validate PLAY_ORDER
     _build_play_order() {
         PLAY_ORDER=$(python3 -c "
@@ -742,7 +744,7 @@ cmd_sets() {
         local rows=""
         for dir in "$WALLPAPER_BASE"/*/; do
             [[ -d "$dir" ]] || continue
-            local name images created shuffle active
+            local name images created shuffle active paths
             name=$(basename "$dir")
             images=$(count_images "$dir")
             created=$(init_field "$dir" "created")
@@ -750,7 +752,16 @@ cmd_sets() {
             [[ "$(init_field "$dir" "shuffle")" == "true" ]] && shuffle="true"
             active="false"
             [[ "$name" == "$ACTIVE_SET" ]] && active="true"
-            rows+="${name}"$'\t'"${images}"$'\t'"${created}"$'\t'"${active}"$'\t'"${shuffle}"$'\n'
+
+            # Same enumeration + sort order as count_images()/_activate_set/
+            # cmd_now, so `images` (count) and `image_paths` (list) below
+            # are always consistent with each other. Joined with \x1f
+            # (ASCII unit separator) rather than tab/newline — those are
+            # already used as this blob's row/field separators.
+            _list_sorted_images "$dir"
+            paths=$(IFS=$'\x1f'; echo "${SORTED_IMAGES[*]}")
+
+            rows+="${name}"$'\t'"${images}"$'\t'"${created}"$'\t'"${active}"$'\t'"${shuffle}"$'\t'"${paths}"$'\n'
         done
         SETS_ROWS="$rows" python3 << 'PYEOF'
 import json, os
@@ -758,13 +769,15 @@ out = []
 for line in os.environ['SETS_ROWS'].splitlines():
     if not line:
         continue
-    name, images, created, active, shuffle = line.split('\t')
+    name, images, created, active, shuffle, paths = line.split('\t')
+    image_paths = paths.split('\x1f') if paths else []
     out.append({
         "name": name,
         "images": int(images),
         "created": created,
         "active": active == "true",
         "shuffle": shuffle == "true",
+        "image_paths": image_paths,
     })
 print(json.dumps(out))
 PYEOF
@@ -828,8 +841,19 @@ cmd_set_create() {
 }
 
 cmd_set_delete() {
-    local name="${1:-}"
-    [[ -z "$name" ]] && die "Usage: shrutz set delete <name>"
+    local name="" yes=0
+
+    # Positional-arg-first, then flags — same loop shape as cmd_import's
+    # `import <path> [--set <name>]`.
+    while (( $# > 0 )); do
+        case "$1" in
+            -y|--yes) yes=1 ;;
+            *)        name="$1" ;;
+        esac
+        shift
+    done
+
+    [[ -z "$name" ]] && die "Usage: shrutz set delete <name> [-y|--yes]"
 
     load_state
     [[ "$name" == "$ACTIVE_SET" ]] && die "cannot delete the active set ('$name' is in use — switch first)"
@@ -837,9 +861,11 @@ cmd_set_delete() {
     local dir="$WALLPAPER_BASE/$name"
     [[ -d "$dir" ]] || die "set '$name' does not exist"
 
-    printf 'shrutz: delete set "%s" and all its images? [y/N] ' "$name"
-    read -r answer
-    [[ "$answer" =~ ^[Yy]$ ]] || { echo "shrutz: cancelled"; exit 0; }
+    if (( yes == 0 )); then
+        printf 'shrutz: delete set "%s" and all its images? [y/N] ' "$name"
+        read -r answer
+        [[ "$answer" =~ ^[Yy]$ ]] || { echo "shrutz: cancelled"; exit 0; }
+    fi
 
     rm -rf "$dir"
     echo "shrutz: deleted set '$name'"
@@ -1153,8 +1179,21 @@ cmd_weather_status() {
         [[ "$WEATHER_LAST_POLL" != "0" ]] && \
             last_checked=$(date -r "$WEATHER_LAST_POLL" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "")
 
+        # Same "condition=set" reader used by the human-readable branch
+        # below and by cmd_weather_map's no-args listing, collapsed into a
+        # tab/newline blob for python3 — same pattern as cmd_sets' rows.
+        # Unmapped conditions are simply absent, matching this project's
+        # "unmapped conditions are simply ignored" philosophy.
+        local mappings_blob=""
+        if [[ -f "$WEATHER_MAP_FILE" && -s "$WEATHER_MAP_FILE" ]]; then
+            while IFS='=' read -r cond setname; do
+                [[ -z "$cond" ]] && continue
+                mappings_blob+="${cond}"$'\t'"${setname}"$'\n'
+            done < "$WEATHER_MAP_FILE"
+        fi
+
         WJ_ENABLED="$enabled" WJ_LOCATION="$WEATHER_LOCATION_LABEL" WJ_CONDITION="$WEATHER_LAST_CONDITION" \
-        WJ_TEMPF="$WEATHER_LAST_TEMP_F" WJ_CHECKED="$last_checked" python3 << 'PYEOF'
+        WJ_TEMPF="$WEATHER_LAST_TEMP_F" WJ_CHECKED="$last_checked" WJ_MAPPINGS="$mappings_blob" python3 << 'PYEOF'
 import json, os
 
 def as_bool(v): return v == "true"
@@ -1164,6 +1203,13 @@ def as_num(v):
     except Exception:
         return None
 
+mappings = []
+for line in os.environ['WJ_MAPPINGS'].splitlines():
+    if not line:
+        continue
+    cond, setname = line.split('\t', 1)
+    mappings.append({"condition": cond, "set": setname})
+
 enabled = as_bool(os.environ['WJ_ENABLED'])
 print(json.dumps({
     "enabled": enabled,
@@ -1172,6 +1218,7 @@ print(json.dumps({
     "temperature_f": as_num(os.environ['WJ_TEMPF']),
     "auto_switch": enabled,
     "last_checked": os.environ['WJ_CHECKED'],
+    "mappings": mappings,
 }))
 PYEOF
         return
@@ -1934,6 +1981,42 @@ cmd_menubar_install() {
     echo "        \"Launch at Login\" from its Preferences if you'd like."
 }
 
+# Quits the running menu bar app (if any) and removes its installed bundle.
+# Shared by `menubar uninstall` and `dieanddontcomeback --ever`, both of
+# which need this exact step after their own confirmation is already in
+# hand. Quitting via pkill (matching the built executable's path) rather
+# than `osascript ... tell application ... quit` — the latter would trigger
+# a brand-new Automation permission prompt to control another app, which
+# this all-bash tool otherwise never needs (see ShrutzPanelView's own
+# openDashboard() comment for the same concern in the other direction).
+_remove_menubar_app() {
+    local dest_app="$HOME/Applications/Shrutz.app"
+    [[ -d "$dest_app" ]] || return 0
+
+    pkill -f "$dest_app/Contents/MacOS/Shrutz" 2>/dev/null || true
+    rm -rf "$dest_app"
+}
+
+# If the menu bar companion app is installed and not already running,
+# launch it once. Called from run_daemon() once per daemon startup (NOT
+# per tick) — restart_daemon() (switch/rename/shuffle/config/weather
+# mutators) restarts the daemon frequently, so the pgrep guard here is
+# what prevents spawning a duplicate app instance on every one of those.
+# Silently does nothing if the app was never installed (opt-in only, see
+# cmd_menubar_install).
+_maybe_launch_menubar_app() {
+    local dest_app="$HOME/Applications/Shrutz.app"
+    [[ -d "$dest_app" ]] || return 0
+
+    # Same pattern _remove_menubar_app uses to target this exact binary.
+    pgrep -f "$dest_app/Contents/MacOS/Shrutz" >/dev/null 2>&1 && return 0
+
+    # -g: don't bring to the foreground — this is a background daemon
+    # starting up, not a user-initiated launch, so it shouldn't steal
+    # focus or jump the Dock.
+    open -g "$dest_app" 2>/dev/null || true
+}
+
 cmd_menubar_uninstall() {
     local dest_app="$HOME/Applications/Shrutz.app"
 
@@ -1947,16 +2030,9 @@ cmd_menubar_uninstall() {
     local answer_lower; answer_lower=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
     [[ "$answer_lower" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
 
-    # Quitting via pkill (matching the built executable's path) rather than
-    # `osascript ... tell application ... quit` — the latter would trigger a
-    # brand-new Automation permission prompt to control another app, which
-    # this all-bash tool otherwise never needs (see ShrutzPanelView's own
-    # openDashboard() comment for the same concern in the other direction).
     echo "shrutz: quitting Shrutz if it's running..."
-    pkill -f "$dest_app/Contents/MacOS/Shrutz" 2>/dev/null || true
-
     echo "shrutz: removing $dest_app..."
-    rm -rf "$dest_app"
+    _remove_menubar_app
 
     echo "shrutz: gone. if you had enabled \"Launch at Login\" from its Preferences,"
     echo "        macOS may still show a stale entry — remove it manually from"
@@ -1993,6 +2069,9 @@ cmd_dieanddontcomeback() {
         echo "shrutz: stopping daemon..."
         launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null || true
 
+        echo "shrutz: removing menu bar app (if installed)..."
+        _remove_menubar_app
+
         echo "shrutz: removing files..."
         rm -f  "$SHRUTZ_BIN"
         rm -f  "$LAUNCHAGENT_PLIST"
@@ -2010,6 +2089,9 @@ cmd_dieanddontcomeback() {
         done
 
         echo "shrutz: gone. your wallpapers were in ~/.local/lib/shrutz/wallpapers/ — also gone."
+        echo "shrutz: if the menu bar app had \"Launch at Login\" enabled, macOS may still"
+        echo "        show a stale entry — remove it manually from System Settings →"
+        echo "        General → Login Items."
         echo "shrutz: goodbye."
     fi
 }
@@ -2075,7 +2157,8 @@ case "${1:-daemon}" in
         echo "  ──────────────────────────────────────────────────"
         echo "  sets                      list all wallpaper sets"
         echo "  set create <n> [src]      create a new set"
-        echo "  set delete <n>            delete a set (cannot delete active)"
+        echo "  set delete <n> [-y]       delete a set (cannot delete active)"
+        echo "    -y, --yes               skip the y/N confirmation prompt"
         echo "  set rename <old> <new>    rename a set"
         echo "  set info <n>              show set details and progress"
         echo "  set shuffle <n> <on|off>  enable/disable shuffle for a set"

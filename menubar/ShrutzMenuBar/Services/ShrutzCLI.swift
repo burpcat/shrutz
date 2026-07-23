@@ -21,7 +21,7 @@ enum ShrutzCLI {
     }
 
     @discardableResult
-    static func run(_ args: [String]) async throws -> (exitCode: Int32, output: String) {
+    static func run(_ args: [String]) async throws -> (exitCode: Int32, stdout: String, stderr: String) {
         guard isInstalled else { throw ShrutzCLIError.notInstalled }
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -29,14 +29,17 @@ enum ShrutzCLI {
             process.executableURL = URL(fileURLWithPath: binaryPath)
             process.arguments = args
 
-            let stdout = Pipe()
-            process.standardOutput = stdout
-            process.standardError = Pipe()
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
 
             process.terminationHandler = { proc in
-                let data = stdout.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                continuation.resume(returning: (proc.terminationStatus, output))
+                let outData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let out = String(data: outData, encoding: .utf8) ?? ""
+                let err = String(data: errData, encoding: .utf8) ?? ""
+                continuation.resume(returning: (proc.terminationStatus, out, err))
             }
 
             do {
@@ -51,8 +54,8 @@ enum ShrutzCLI {
     /// unparseable output surfaces as decodeFailed rather than silently
     /// returning stale/default data.
     static func runJSON<T: Decodable>(_ args: [String], as type: T.Type) async throws -> T {
-        let (_, output) = try await run(args)
-        guard let data = output.data(using: .utf8) else {
+        let (_, stdout, _) = try await run(args)
+        guard let data = stdout.data(using: .utf8) else {
             throw ShrutzCLIError.decodeFailed("non-utf8 output")
         }
         do {

@@ -34,6 +34,12 @@ struct WallpaperSet: Codable, Identifiable, Hashable {
     let created: String
     let active: Bool
     let shuffle: Bool
+    let imagePaths: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case name, images, created, active, shuffle
+        case imagePaths = "image_paths"
+    }
 }
 
 struct DaemonStatus: Codable {
@@ -85,6 +91,11 @@ struct ShrutzConfig: Codable {
     }
 }
 
+struct WeatherMapping: Codable, Hashable {
+    let condition: String
+    let set: String
+}
+
 struct WeatherStatus: Codable {
     let enabled: Bool
     let location: String
@@ -92,12 +103,14 @@ struct WeatherStatus: Codable {
     let temperatureF: Double?
     let autoSwitch: Bool
     let lastChecked: String
+    let mappings: [WeatherMapping]
 
     enum CodingKeys: String, CodingKey {
         case enabled, location, condition
         case temperatureF = "temperature_f"
         case autoSwitch = "auto_switch"
         case lastChecked = "last_checked"
+        case mappings
     }
 }
 

@@ -11,6 +11,11 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: ShrutzMenuBar
+        excludes:
+          - "Resources/Fonts/**"
+      - path: ShrutzMenuBar/Resources/Fonts
+        type: folder
+        name: Fonts
     info:
       path: Generated/Info.plist
       properties:
@@ -21,6 +26,7 @@ targets:
         NSHumanReadableCopyright: "MIT"
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
+        ATSApplicationFontsPath: Fonts
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.burpcat.shrutz.menubar

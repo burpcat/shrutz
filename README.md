@@ -130,6 +130,7 @@ shrutz set info dark                     # image count, disk size, progress
 shrutz set shuffle dark on               # enable shuffle for a set
 shrutz set rename dark evening           # rename a set
 shrutz set delete old-set               # delete a set (with confirmation)
+shrutz set delete old-set -y            # ...or skip the prompt (scripts/GUI)
 shrutz switch dark                       # switch active set
 shrutz import ~/path/to/images/          # import into active set
 shrutz import ~/path/ --set dark         # import into a specific set
@@ -269,6 +270,8 @@ shrutz menubar install
 
 Builds the app (in `menubar/`, an Xcode project) and installs it to `~/Applications`. Ad-hoc signed — no Apple Developer account needed — requires Xcode. Gives you current wallpaper/timer status, next/prev/pause/resume, a sets switcher, daemon start/stop, weather status, a Creators Publish gallery browser with thumbnails, and a preferences window for the config tunables. See [`menubar/README.md`](menubar/README.md) for details.
 
+Once installed, shrutz launches it for you — every time the daemon (re)starts (including the frequent automatic restarts from switching sets, editing config, or a weather-triggered switch), it checks whether `Shrutz.app` is already running and opens it in the background if not, so you never have to manually relaunch it yourself.
+
 ```bash
 shrutz menubar uninstall
 ```
@@ -317,7 +320,7 @@ shrutz dieanddontcomeback --ever
 shrutz dieanddontcomeback -e
 ```
 
-Same prompt. On confirmation: stops the daemon, removes the binary, the launchd plist, the man page, and the entire `~/.local/lib/shrutz/` tree including all your wallpaper sets. Also strips the `PATH` and `MANPATH` lines from your `.zshrc` and `.bashrc`.
+Same prompt. On confirmation: stops the daemon, quits and removes the menu bar app if it's installed (`~/Applications/Shrutz.app`), removes the binary, the launchd plist, the man page, and the entire `~/.local/lib/shrutz/` tree including all your wallpaper sets. Also strips the `PATH` and `MANPATH` lines from your `.zshrc` and `.bashrc`.
 
 There is no undo.
 
