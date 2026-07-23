@@ -167,8 +167,19 @@ INIT_EOF
 fi
 
 # ── Step 4: Install script ─────────────────────────────────────
-cp "$SRC" "$BIN/shrutz"
-chmod +x "$BIN/shrutz"
+# `shrutz update` re-runs this installer FROM the very file being
+# installed here (~/.local/bin/shrutz). Writing straight into that path
+# with `cp` would truncate/rewrite the script while it's still being
+# read by the running process, corrupting that one invocation's
+# remaining output. Write to a temp file in the same directory (so the
+# final `mv` is an atomic same-filesystem rename) and swap it into
+# place instead — the currently-running process keeps reading its own
+# already-open (now-unlinked) file unaffected, and every subsequent
+# invocation sees the new file from the start.
+SHRUTZ_BIN_TMP="$(mktemp "$BIN/.shrutz.XXXXXX")"
+cp "$SRC" "$SHRUTZ_BIN_TMP"
+chmod +x "$SHRUTZ_BIN_TMP"
+mv "$SHRUTZ_BIN_TMP" "$BIN/shrutz"
 ok "$BIN/shrutz"
 
 # ── Step 5: Add ~/.local/bin and MANPATH to shell RC ───────────
