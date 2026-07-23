@@ -1202,6 +1202,29 @@ STATE
     [[ "$output" == *"no ShrutzMenuBar.xcodeproj found"* ]]
 }
 
+@test "menubar uninstall: reports nothing to do when Shrutz.app isn't installed" {
+    run "$SHRUTZ" menubar uninstall
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"not installed"* ]]
+    [[ "$output" == *"nothing to do"* ]]
+}
+
+@test "menubar uninstall: declining the confirmation prompt leaves the app in place" {
+    mkdir -p "$TEST_HOME/Applications/Shrutz.app/Contents/MacOS"
+    run bash -c "echo 'no' | '$SHRUTZ' menubar uninstall"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"fine, staying."* ]]
+    [ -d "$TEST_HOME/Applications/Shrutz.app" ]
+}
+
+@test "menubar uninstall: confirming removes the installed app" {
+    mkdir -p "$TEST_HOME/Applications/Shrutz.app/Contents/MacOS"
+    run bash -c "echo 'yes' | '$SHRUTZ' menubar uninstall"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"removing"* ]]
+    [ ! -d "$TEST_HOME/Applications/Shrutz.app" ]
+}
+
 # ══════════════════════════════════════════════════════════════════
 # VERSION
 # ══════════════════════════════════════════════════════════════════
