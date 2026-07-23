@@ -196,7 +196,7 @@ shrutz follows the [XDG Base Directory](https://specifications.freedesktop.org/b
 └── local.shrutz.plist                            → symlink to ~/.local/etc/launchd/
 
 ~/Applications/
-└── ShrutzMenuBar.app                             optional, via `shrutz menubar install`
+└── Shrutz.app                                     optional, via `shrutz menubar install`
 ```
 
 Each set folder contains a `__init__` metadata file:
