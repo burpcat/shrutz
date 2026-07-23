@@ -317,7 +317,7 @@ shrutz dieanddontcomeback --ever
 shrutz dieanddontcomeback -e
 ```
 
-Same prompt. On confirmation: stops the daemon, removes the binary, the launchd plist, the man page, and the entire `~/.local/lib/shrutz/` tree including all your wallpaper sets. Also strips the `PATH` and `MANPATH` lines from your `.zshrc` and `.bashrc`.
+Same prompt. On confirmation: stops the daemon, quits and removes the menu bar app if it's installed (`~/Applications/Shrutz.app`), removes the binary, the launchd plist, the man page, and the entire `~/.local/lib/shrutz/` tree including all your wallpaper sets. Also strips the `PATH` and `MANPATH` lines from your `.zshrc` and `.bashrc`.
 
 There is no undo.
 

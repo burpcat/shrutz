@@ -1934,6 +1934,22 @@ cmd_menubar_install() {
     echo "        \"Launch at Login\" from its Preferences if you'd like."
 }
 
+# Quits the running menu bar app (if any) and removes its installed bundle.
+# Shared by `menubar uninstall` and `dieanddontcomeback --ever`, both of
+# which need this exact step after their own confirmation is already in
+# hand. Quitting via pkill (matching the built executable's path) rather
+# than `osascript ... tell application ... quit` — the latter would trigger
+# a brand-new Automation permission prompt to control another app, which
+# this all-bash tool otherwise never needs (see ShrutzPanelView's own
+# openDashboard() comment for the same concern in the other direction).
+_remove_menubar_app() {
+    local dest_app="$HOME/Applications/Shrutz.app"
+    [[ -d "$dest_app" ]] || return 0
+
+    pkill -f "$dest_app/Contents/MacOS/Shrutz" 2>/dev/null || true
+    rm -rf "$dest_app"
+}
+
 cmd_menubar_uninstall() {
     local dest_app="$HOME/Applications/Shrutz.app"
 
@@ -1947,16 +1963,9 @@ cmd_menubar_uninstall() {
     local answer_lower; answer_lower=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
     [[ "$answer_lower" == *yes* ]] || { echo "shrutz: fine, staying."; exit 0; }
 
-    # Quitting via pkill (matching the built executable's path) rather than
-    # `osascript ... tell application ... quit` — the latter would trigger a
-    # brand-new Automation permission prompt to control another app, which
-    # this all-bash tool otherwise never needs (see ShrutzPanelView's own
-    # openDashboard() comment for the same concern in the other direction).
     echo "shrutz: quitting Shrutz if it's running..."
-    pkill -f "$dest_app/Contents/MacOS/Shrutz" 2>/dev/null || true
-
     echo "shrutz: removing $dest_app..."
-    rm -rf "$dest_app"
+    _remove_menubar_app
 
     echo "shrutz: gone. if you had enabled \"Launch at Login\" from its Preferences,"
     echo "        macOS may still show a stale entry — remove it manually from"
@@ -1993,6 +2002,9 @@ cmd_dieanddontcomeback() {
         echo "shrutz: stopping daemon..."
         launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null || true
 
+        echo "shrutz: removing menu bar app (if installed)..."
+        _remove_menubar_app
+
         echo "shrutz: removing files..."
         rm -f  "$SHRUTZ_BIN"
         rm -f  "$LAUNCHAGENT_PLIST"
@@ -2010,6 +2022,9 @@ cmd_dieanddontcomeback() {
         done
 
         echo "shrutz: gone. your wallpapers were in ~/.local/lib/shrutz/wallpapers/ — also gone."
+        echo "shrutz: if the menu bar app had \"Launch at Login\" enabled, macOS may still"
+        echo "        show a stale entry — remove it manually from System Settings →"
+        echo "        General → Login Items."
         echo "shrutz: goodbye."
     fi
 }

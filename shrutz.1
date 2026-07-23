@@ -295,8 +295,10 @@ are left completely untouched. The launchd agent is stopped before
 the binary is removed.
 .TP
 .BR "shrutz dieanddontcomeback \-\-ever" " | " "\-e"
-Full uninstall after confirmation. Stops the daemon, removes the binary,
-the launchd agent plist, the man page, and the entire
+Full uninstall after confirmation. Stops the daemon, quits and removes
+the menu bar app if it's installed
+.RI ( ~/Applications/Shrutz.app ),
+removes the binary, the launchd agent plist, the man page, and the entire
 .I ~/.local/lib/shrutz/
 tree including all wallpaper sets, state, and logs. Also strips the
 .B PATH

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.3.1
+
+**`shrutz dieanddontcomeback --ever` now also removes the menu bar app.** The full wipe previously left `~/Applications/Shrutz.app` behind entirely untouched. It now quits and removes it too (sharing the same logic `menubar uninstall` uses), with the same note about a possible stale Login Items entry.
+
 ## v2.3.0
 
 **`shrutz menubar uninstall`.** Counterpart to `shrutz menubar install` — prompts `really?`, quits the app if it's running, and removes `~/Applications/Shrutz.app`. Reports cleanly if the app isn't installed rather than prompting for nothing to do. Notes that a "Launch at Login" registration may leave a stale Login Items entry macOS itself has no CLI-triggerable way to remove.

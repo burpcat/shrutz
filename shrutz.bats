@@ -1130,6 +1130,18 @@ STATE
     [ ! -f "$TEST_HOME/.local/share/man/man1/shrutz.1" ]
 }
 
+@test "dieanddontcomeback --ever: removes the menu bar app if installed" {
+    mkdir -p "$TEST_HOME/Applications/Shrutz.app/Contents/MacOS"
+    bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ ! -d "$TEST_HOME/Applications/Shrutz.app" ]
+}
+
+@test "dieanddontcomeback --ever: succeeds cleanly when the menu bar app isn't installed" {
+    run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback --ever"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"goodbye"* ]]
+}
+
 @test "dieanddontcomeback -e: short flag works identically to --ever" {
     run bash -c "echo 'yes' | '$SHRUTZ' dieanddontcomeback -e"
     [ "$status" -eq 0 ]
