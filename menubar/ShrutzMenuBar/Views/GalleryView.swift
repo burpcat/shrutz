@@ -19,16 +19,21 @@ private struct GalleryDisclaimerView: View {
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
-            Text("Creators Publish")
-                .font(.shrutzSerif(22, weight: .semibold))
-                .foregroundColor(ShrutzPalette.navy)
-            Text("bros and not bros — I'm not the owner nor the plug for these, y'all. Download and use at your own discretion, but I crafted them with love. — gang_")
-                .font(.shrutzSerif(15, italic: true))
-                .foregroundColor(ShrutzPalette.navy.opacity(0.85))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 380)
-            Button("Continue", action: onContinue)
-                .buttonStyle(.borderedProminent)
+            VStack(spacing: 14) {
+                Text("Disclaimer")
+                    .font(.shrutzSerif(18, weight: .semibold))
+                    .foregroundColor(.black.opacity(0.85))
+                Text("bros and not bros — I'm not the owner nor the plug for these. Download and use at your discretion, but I crafted them with love.\n— gang")
+                    .font(.shrutzSerif(14, italic: true))
+                    .foregroundColor(.black.opacity(0.75))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 340)
+                Button("I understand") { onContinue() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(ShrutzPalette.accent)
+            }
+            .padding(28)
+            .glassCard()
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -36,9 +41,8 @@ private struct GalleryDisclaimerView: View {
     }
 }
 
-/// Styled to match the Sets tab exactly — same fonts, same lazy/bounded
-/// thumbnail pattern (here backed by RemoteThumbnailCache instead of the
-/// local ThumbnailCache).
+/// Same serif/small-caps/lazy-thumbnail language as the Sets tab, laid out
+/// as a 3-column grid (mockup 08).
 private struct GalleryListView: View {
     @State private var entries: [GalleryEntry] = []
     @State private var loading = false
@@ -46,19 +50,21 @@ private struct GalleryListView: View {
     @State private var installingName: String?
     @State private var unloadError: [String: String] = [:]
 
+    private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+
     var body: some View {
         Group {
             if loading && entries.isEmpty {
                 ProgressView("Loading gallery…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error = errorMessage {
-                Text(error).foregroundColor(.red)
+            } else if errorMessage != nil {
+                errorCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
+                    LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(entries) { entry in
-                            entryRow(entry)
+                            entryCard(entry)
                         }
                     }
                     .padding(20)
@@ -68,36 +74,70 @@ private struct GalleryListView: View {
         .task { await load() }
     }
 
-    private func entryRow(_ entry: GalleryEntry) -> some View {
-        HStack(spacing: 12) {
-            GalleryThumbnail(urlString: entry.thumbnailUrl)
-                .frame(width: 72, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+    private var errorCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 26))
+                .foregroundColor(ShrutzPalette.textSecondary)
+            Text("Couldn't load the gallery — check your connection")
+                .font(.system(size: 13))
+                .foregroundColor(ShrutzPalette.textPrimary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 240)
+            Button("Try again") { Task { await load() } }
+                .buttonStyle(.borderedProminent)
+                .tint(ShrutzPalette.accent)
+        }
+        .padding(28)
+        .glassCard()
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.name)
-                    .font(.shrutzSerif(16, weight: .medium))
-                    .foregroundColor(ShrutzPalette.navy)
-                Text("by \(entry.author)")
-                    .font(.shrutzSans(11))
-                    .foregroundColor(.secondary)
-                Text(entry.description)
-                    .font(.shrutzSans(12))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                if let message = unloadError[entry.name] {
-                    Text(message)
-                        .font(.shrutzSans(11))
-                        .foregroundColor(.red)
+    private func entryCard(_ entry: GalleryEntry) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .topTrailing) {
+                GalleryThumbnail(urlString: entry.thumbnailUrl)
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(ShrutzPalette.thumbnailAspectRatio, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail, style: .continuous))
+
+                if entry.installed {
+                    Button {
+                        Task { await unload(entry) }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(ShrutzPalette.accent)
+                            .background(Circle().fill(.white))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(6)
                 }
             }
 
-            Spacer()
+            Text(entry.name)
+                .font(.shrutzSerif(16, weight: .medium))
+                .foregroundColor(ShrutzPalette.textPrimary)
+            Text(entry.author)
+                .font(.shrutzSmallCaps(10))
+                .tracking(1)
+                .foregroundColor(ShrutzPalette.textSecondary)
+            Text(entry.description)
+                .font(.system(size: 11))
+                .foregroundColor(ShrutzPalette.textSecondary)
+                .lineLimit(1)
+            Text("\(entry.images) images")
+                .font(.system(size: 10))
+                .foregroundColor(ShrutzPalette.textSecondary)
+
+            if let message = unloadError[entry.name] {
+                Text(message)
+                    .font(.system(size: 10))
+                    .foregroundColor(.red)
+            }
 
             actionControl(entry)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(ShrutzPalette.controlBackground))
+        .glassCard()
     }
 
     @ViewBuilder
@@ -105,9 +145,14 @@ private struct GalleryListView: View {
         if installingName == entry.name {
             ProgressView().controlSize(.small)
         } else if entry.installed {
-            Button("Unload") { Task { await unload(entry) } }
+            Text("Installed")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(ShrutzPalette.textSecondary)
         } else {
-            Button("Install") { Task { await install(entry.name) } }
+            Button("Download") { Task { await install(entry.name) } }
+                .buttonStyle(.borderedProminent)
+                .tint(ShrutzPalette.accent)
+                .controlSize(.small)
         }
     }
 
@@ -151,7 +196,7 @@ private struct GalleryThumbnail: View {
             if let image {
                 Image(nsImage: image).resizable().scaledToFill()
             } else {
-                ShrutzPalette.controlBackground
+                Shimmer()
             }
         }
         .task(id: urlString) {

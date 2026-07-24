@@ -1,18 +1,23 @@
 import SwiftUI
 import AppKit
 
-/// App-wide typography. Cormorant Garamond (old-style Garamond revival,
-/// OFL) is the primary serif — headings, the wordmark, editorial set
-/// names. Libre Franklin (also OFL) is the dense-UI fallback where
-/// Cormorant Garamond's delicate hairlines would wash out at small sizes.
-/// Both are bundled under Resources/Fonts and registered via
+/// Typography is scoped, not app-wide:
+/// - The wordmark lockup uses **Pinyon Script** (OFL) for the ornate "S"
+///   and **Cormorant Garamond** (OFL) for the plain "hrut" — see
+///   ShrutzWordmark.swift. The "z" is bold system red, not a custom font.
+/// - **Sets** and **Creators Publish** tab content (titles, author/count
+///   labels) use Cormorant Garamond + its true small-caps sibling
+///   Cormorant SC (OFL) — an "old-money" editorial register.
+/// - Everything else (popover set name, General tab, Weather labels) uses
+///   the plain system (SF Pro) face via `.system(...)`, per the brief.
+/// All fonts are bundled under Resources/Fonts and registered via
 /// ATSApplicationFontsPath in Info.plist — see project.yml.
 enum ShrutzFont {
     enum SerifWeight {
         case regular, medium, semibold
     }
-    enum SansWeight {
-        case regular, medium, semibold, bold
+    enum SmallCapsWeight {
+        case regular, medium, semibold
     }
 
     static func serifPostScriptName(_ weight: SerifWeight, italic: Bool) -> String {
@@ -26,14 +31,15 @@ enum ShrutzFont {
         }
     }
 
-    static func sansPostScriptName(_ weight: SansWeight) -> String {
+    static func smallCapsPostScriptName(_ weight: SmallCapsWeight) -> String {
         switch weight {
-        case .regular:  return "LibreFranklin-Regular"
-        case .medium:   return "LibreFranklin-Medium"
-        case .semibold: return "LibreFranklin-SemiBold"
-        case .bold:     return "LibreFranklin-Bold"
+        case .regular:  return "CormorantSC-Regular"
+        case .medium:   return "CormorantSC-Medium"
+        case .semibold: return "CormorantSC-SemiBold"
         }
     }
+
+    static let wordmarkScriptPostScriptName = "PinyonScript-Regular"
 }
 
 extension Font {
@@ -41,8 +47,15 @@ extension Font {
         .custom(ShrutzFont.serifPostScriptName(weight, italic: italic), size: size)
     }
 
-    static func shrutzSans(_ size: CGFloat, weight: ShrutzFont.SansWeight = .regular) -> Font {
-        .custom(ShrutzFont.sansPostScriptName(weight), size: size)
+    /// True small caps (not shrunk capitals) for author/image-count labels
+    /// on the Sets and Creators Publish tabs. Callers should also apply
+    /// `.tracking(...)` for the letter-spaced look shown in the mockups.
+    static func shrutzSmallCaps(_ size: CGFloat, weight: ShrutzFont.SmallCapsWeight = .regular) -> Font {
+        .custom(ShrutzFont.smallCapsPostScriptName(weight), size: size)
+    }
+
+    static func shrutzWordmarkScript(_ size: CGFloat) -> Font {
+        .custom(ShrutzFont.wordmarkScriptPostScriptName, size: size)
     }
 }
 
@@ -56,7 +69,8 @@ enum Typography {
         let names = [
             "CormorantGaramond-Regular", "CormorantGaramond-Medium", "CormorantGaramond-SemiBold",
             "CormorantGaramond-Italic", "CormorantGaramond-MediumItalic", "CormorantGaramond-SemiBoldItalic",
-            "LibreFranklin-Regular", "LibreFranklin-Medium", "LibreFranklin-SemiBold", "LibreFranklin-Bold",
+            "CormorantSC-Regular", "CormorantSC-Medium", "CormorantSC-SemiBold",
+            "PinyonScript-Regular",
         ]
         for name in names where NSFont(name: name, size: 12) == nil {
             print("⚠️ Typography: font '\(name)' failed to resolve — check ATSApplicationFontsPath / exact PostScript name")

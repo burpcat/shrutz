@@ -52,11 +52,14 @@ automatically on every startup/restart if it isn't already running.
     `PreferencesView`, with explicit `NSApp.activate` +
     `makeKeyAndOrderFront` so it reliably comes to the front for this
     `LSUIElement` accessory app.
-- `ShrutzMenuBar/Typography.swift` — `Font.shrutzSerif`/`Font.shrutzSans`
-  helpers wrapping the bundled Cormorant Garamond (primary serif) and Libre
-  Franklin (dense-UI fallback) font families under
-  `ShrutzMenuBar/Resources/Fonts/`, registered via `ATSApplicationFontsPath`
-  in `project.yml`. Both are SIL Open Font License, freely embeddable.
+- `ShrutzMenuBar/Typography.swift` — typography is scoped, not app-wide:
+  `Font.shrutzWordmarkScript` (Pinyon Script, the wordmark's ornate "S")
+  and `Font.shrutzSerif` (Cormorant Garamond, the wordmark's plain "hrut"
+  and Sets/Creators Publish titles), `Font.shrutzSmallCaps` (Cormorant SC,
+  the true small-caps sibling — not faked shrunk capitals — for
+  author/image-count labels). Everything else uses the plain system font.
+  All bundled under `ShrutzMenuBar/Resources/Fonts/`, registered via
+  `ATSApplicationFontsPath` in `project.yml`; all SIL Open Font License.
 - `ShrutzMenuBar/Services/ShrutzCLI.swift` — `Process` wrapper. Always
   invokes `~/.local/bin/shrutz` by absolute path (a GUI app launched from
   Finder/Login Items never sources the `PATH` export install.sh adds to
@@ -69,11 +72,11 @@ automatically on every startup/restart if it isn't already running.
   can't see. Switches to a faster poll cadence while `AppState` suspects
   the daemon may be down, so the quit-debounce grace window resolves
   promptly.
-- `ShrutzMenuBar/Services/LoginItemManager.swift` — `SMAppService`-based
-  "Launch at Login" toggle.
 - `ShrutzMenuBar/Services/WallpaperPaletteExtractor.swift` — native
-  downsample + histogram-based dominant-color extraction, used both for the
-  panel's live tinting wash and the Weather tab's per-set tint.
+  downsample + spatial (quadrant + center) color sampling — preserves the
+  wallpaper's actual regional color layout rather than collapsing it to
+  frequency-ranked colors, which tends to read as one muddy midtone. Used
+  both for the panel's live tinting wash and the Weather tab's per-set tint.
 - `ShrutzMenuBar/Services/ThumbnailCache.swift` /
   `RemoteThumbnailCache.swift` — bounded, cancellable, on-demand thumbnail
   loading for the Sets tab (local files) and Creators Publish tab (remote
@@ -81,11 +84,23 @@ automatically on every startup/restart if it isn't already running.
 - `ShrutzMenuBar/Models/ShrutzState.swift` — `Codable` structs matching the
   JSON shapes `shrutz now/sets/status/stats/config/weather --json` emit.
   Keep these in lockstep with the bash side if either changes.
-- `ShrutzMenuBar/Views/` — `ShrutzPanelView` (the dropdown card),
-  `ShrutzWordmark`/`ShrutzStatusMark` (the logo lockup and status-bar mark),
-  `FrostedTintBackground` (the tinting wash), `RotaryDurationDial` (the
-  tactile duration control), `PreferencesView` (General/Sets tabs),
+- `ShrutzMenuBar/Views/` — `ShrutzPanelView` (the popover: collapsed/expanded
+  states), `ShrutzWordmark`/`ShrutzStatusMark` (the logo lockup and
+  status-bar mark), `FrostedTintBackground` (the tinting wash), `Shimmer`
+  (lazy-thumbnail placeholder), `RotaryDurationDial` (the tactile duration
+  control), `PreferencesView` (the pill tab bar, General/Sets tabs),
   `WeatherSectionView`, `GalleryView` (Weather and Creators Publish tabs).
+- "Launch at login" (General tab) mirrors the *daemon's* launchd
+  registration (`shrutz autostart on|off`, `RunAtLoad` in the LaunchAgent
+  plist) rather than a separate app-only login item — since the daemon
+  already launches this app on its own startup, this one toggle is what
+  makes app and daemon move together. There is no `LoginItemManager`/
+  `SMAppService` in this app.
+- `design/` — the approved mockups this redesign was built against
+  (`design/reference/`), screenshots captured from a running build for
+  comparison (`design/screenshots/`), and `design/FIDELITY.md` — the
+  per-screen fidelity report (what matches, what deliberately deviates,
+  and why).
 
 ## Requirements
 

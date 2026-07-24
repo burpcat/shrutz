@@ -710,12 +710,14 @@ cmd_status() {
             [[ -z "$pid" ]] && pid=0
             [[ -z "$last_exit" ]] && last_exit=0
         fi
-        SJ_LOADED="$loaded" SJ_PID="$pid" SJ_EXIT="$last_exit" python3 << 'PYEOF'
+        local autostart_enabled; autostart_enabled=$(_autostart_is_enabled)
+        SJ_LOADED="$loaded" SJ_PID="$pid" SJ_EXIT="$last_exit" SJ_AUTOSTART="$autostart_enabled" python3 << 'PYEOF'
 import json, os
 print(json.dumps({
     "loaded": os.environ['SJ_LOADED'] == "true",
     "pid": int(os.environ['SJ_PID']),
     "last_exit_status": int(os.environ['SJ_EXIT']),
+    "autostart_enabled": os.environ['SJ_AUTOSTART'] == "true",
 }))
 PYEOF
         return
@@ -734,6 +736,73 @@ cmd_start() {
 
 cmd_stop() {
     launchctl unload "$LAUNCHAGENT_PLIST"
+}
+
+# Whether the daemon's LaunchAgent is registered to start at login
+# (RunAtLoad in the plist install.sh writes) — separate from whether it's
+# loaded/running *right now* (that's cmd_status/`launchctl list`). Prints
+# "true"/"false" on stdout; defaults to "false" if the plist is missing.
+_autostart_is_enabled() {
+    [[ -f "$LAUNCHAGENT_PLIST" ]] || { echo "false"; return; }
+    python3 - "$LAUNCHAGENT_PLIST" << 'PYEOF'
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    d = plistlib.load(f)
+print("true" if d.get("RunAtLoad") else "false")
+PYEOF
+}
+
+_autostart_set() {
+    local value="$1"  # "true" or "false"
+    [[ -f "$LAUNCHAGENT_PLIST" ]] || die "no LaunchAgent plist found at $LAUNCHAGENT_PLIST — run install.sh first"
+    AS_VALUE="$value" python3 - "$LAUNCHAGENT_PLIST" << 'PYEOF'
+import plistlib, os, sys
+path = sys.argv[1]
+with open(path, 'rb') as f:
+    d = plistlib.load(f)
+d['RunAtLoad'] = os.environ['AS_VALUE'] == "true"
+with open(path, 'wb') as f:
+    plistlib.dump(d, f, fmt=plistlib.FMT_XML)
+PYEOF
+}
+
+# ── shrutz autostart ────────────────────────────────────────────
+# Toggles whether the daemon's LaunchAgent starts at login (RunAtLoad).
+# This mirrors the daemon's own launchd registration rather than being a
+# separate app-only login item — since the daemon already launches the
+# menu bar app on its own startup (see _maybe_launch_menubar_app), toggling
+# just this one thing is what makes "app and daemon move together." Does
+# not load/unload the *current* session — that's `shrutz start`/`stop`;
+# this only affects what happens at the *next* login.
+cmd_autostart() {
+    local subcmd="${1:-status}"
+
+    case "$subcmd" in
+        on)
+            _autostart_set true
+            echo "shrutz: launch at login enabled — the daemon (and the menu bar app, if installed) will start at your next login"
+            ;;
+        off)
+            _autostart_set false
+            echo "shrutz: launch at login disabled — the daemon will not start automatically at your next login"
+            ;;
+        status)
+            if [[ "$(_autostart_is_enabled)" == "true" ]]; then
+                echo "shrutz: launch at login is on"
+            else
+                echo "shrutz: launch at login is off"
+            fi
+            ;;
+        --json)
+            AJ_ENABLED="$(_autostart_is_enabled)" python3 << 'PYEOF'
+import json, os
+print(json.dumps({"autostart_enabled": os.environ['AJ_ENABLED'] == "true"}))
+PYEOF
+            ;;
+        *)
+            die "Usage: shrutz autostart <on|off|status>"
+            ;;
+    esac
 }
 
 # ── shrutz sets ────────────────────────────────────────────────
@@ -1193,7 +1262,8 @@ cmd_weather_status() {
         fi
 
         WJ_ENABLED="$enabled" WJ_LOCATION="$WEATHER_LOCATION_LABEL" WJ_CONDITION="$WEATHER_LAST_CONDITION" \
-        WJ_TEMPF="$WEATHER_LAST_TEMP_F" WJ_CHECKED="$last_checked" WJ_MAPPINGS="$mappings_blob" python3 << 'PYEOF'
+        WJ_TEMPF="$WEATHER_LAST_TEMP_F" WJ_CHECKED="$last_checked" WJ_MAPPINGS="$mappings_blob" \
+        WJ_CONDITIONS="${WEATHER_CONDITIONS[*]}" python3 << 'PYEOF'
 import json, os
 
 def as_bool(v): return v == "true"
@@ -1219,6 +1289,7 @@ print(json.dumps({
     "auto_switch": enabled,
     "last_checked": os.environ['WJ_CHECKED'],
     "mappings": mappings,
+    "conditions": os.environ['WJ_CONDITIONS'].split(),
 }))
 PYEOF
         return
@@ -2109,6 +2180,7 @@ case "${1:-daemon}" in
     log)          cmd_log ;;
     start)        cmd_start ;;
     stop)         cmd_stop ;;
+    autostart)    shift; cmd_autostart "$@" ;;
     sets)         shift; cmd_sets "$@" ;;
     set)          shift; cmd_set "$@" ;;
     switch)       shift; cmd_switch "$@" ;;
@@ -2140,6 +2212,8 @@ case "${1:-daemon}" in
         echo "  log                       stream the live activity log"
         echo "  start                     load and start the daemon"
         echo "  stop                      unload and stop the daemon"
+        echo "  autostart <on|off>        enable/disable daemon start at login"
+        echo "  autostart status          show whether it's currently enabled"
         echo "  update                    pull latest version and reinstall"
         echo "  menubar install           build + install the menu bar companion app"
         echo "  menubar uninstall         quit + remove the menu bar companion app"

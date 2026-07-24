@@ -3,12 +3,25 @@ import ImageIO
 import CoreGraphics
 import SwiftUI
 
-/// A small, cheap palette derived from a wallpaper image — the pure-app-side
-/// "chrome" rendering half of the tinting engine (per this project's rule
-/// that colour extraction/tinting live in Swift, while *which* wallpaper is
-/// current comes from the CLI's JSON).
+/// A small, spatially-ordered palette derived from a wallpaper image — the
+/// pure-app-side "chrome" rendering half of the tinting engine (per this
+/// project's rule that colour extraction/tinting live in Swift, while
+/// *which* wallpaper is current comes from the CLI's JSON).
+///
+/// `colors` is always 5 entries in a fixed spatial order — topLeft,
+/// topRight, bottomLeft, bottomRight, center — so the ambient mesh's blobs
+/// can be positioned to match where those tones actually sit in the real
+/// wallpaper, instead of just being "the N most frequent colors" (which
+/// tends to collapse photos into one muddy midtone and loses the spatial
+/// variation that makes a gradient mesh read as a mesh).
 struct WallpaperPalette: Equatable {
     let colors: [Color]
+
+    var topLeft: Color { colors[0] }
+    var topRight: Color { colors[1] }
+    var bottomLeft: Color { colors[2] }
+    var bottomRight: Color { colors[3] }
+    var center: Color { colors[4] }
 }
 
 enum PaletteError: Error {
@@ -16,22 +29,17 @@ enum PaletteError: Error {
 }
 
 enum WallpaperPaletteExtractor {
-    /// Downsamples the image at `path` to a tiny thumbnail (native, cheap —
-    /// never decodes the full-resolution source) and extracts a handful of
-    /// dominant colors via histogram bucketing: quantize each pixel's R/G/B
-    /// into a small number of levels, tally frequency per bucket, and return
-    /// the most frequent buckets' *averaged actual pixel colors* (not the
-    /// quantized bucket center, which would look flat/banded).
-    ///
-    /// Histogram bucketing over k-means: deterministic, no iteration, no
-    /// dependency, cheap enough to run on every wallpaper switch.
-    static func extractPalette(fromImageAt path: String, resultCount: Int = 4) async throws -> WallpaperPalette {
+    /// Downsamples the image at `path` to a tiny grid (native, cheap —
+    /// never decodes the full-resolution source) and averages each of 5
+    /// regions (four quadrants + center) into a color, preserving the
+    /// wallpaper's actual spatial color layout.
+    static func extractPalette(fromImageAt path: String) async throws -> WallpaperPalette {
         try Task.checkCancellation()
-        guard let cgImage = downsample(path: path, maxPixelSize: 24) else {
+        guard let cgImage = downsample(path: path, maxPixelSize: 32) else {
             throw PaletteError.decodeFailed
         }
         try Task.checkCancellation()
-        return histogramPalette(from: cgImage, bucketsPerChannel: 4, resultCount: resultCount)
+        return spatialPalette(from: cgImage)
     }
 
     private static func downsample(path: String, maxPixelSize: Int) -> CGImage? {
@@ -46,11 +54,11 @@ enum WallpaperPaletteExtractor {
         return CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
     }
 
-    private static func histogramPalette(from cgImage: CGImage, bucketsPerChannel: Int, resultCount: Int) -> WallpaperPalette {
+    private static func spatialPalette(from cgImage: CGImage) -> WallpaperPalette {
         let width = cgImage.width
         let height = cgImage.height
-        guard width > 0, height > 0 else {
-            return WallpaperPalette(colors: [Color.gray])
+        guard width > 1, height > 1 else {
+            return WallpaperPalette(colors: Array(repeating: Color.gray, count: 5))
         }
 
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -64,53 +72,96 @@ enum WallpaperPaletteExtractor {
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else {
-            return WallpaperPalette(colors: [Color.gray])
+            return WallpaperPalette(colors: Array(repeating: Color.gray, count: 5))
         }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        struct Bucket {
+        // Saturation-weighted HSB centroid, not a flat RGB mean: a region
+        // containing skin tone + shadow + highlight averages, in RGB, to a
+        // desaturated muddy midtone. Weighting each pixel by how vivid it
+        // already is (and letting near-black/near-white pixels drop out
+        // entirely) lets the region's real accent color win instead of
+        // being diluted by its own shadows/highlights.
+        func vividColor(xRange: Range<Int>, yRange: Range<Int>) -> Color {
+            var sumWeight = 0.0
+            var sumHueX = 0.0, sumHueY = 0.0
+            var sumSatWeighted = 0.0, sumValWeighted = 0.0
             var count = 0
-            var rSum = 0, gSum = 0, bSum = 0
+
+            for y in yRange {
+                for x in xRange {
+                    let i = (y * width + x) * 4
+                    let r = Double(pixels[i]) / 255
+                    let g = Double(pixels[i + 1]) / 255
+                    let b = Double(pixels[i + 2]) / 255
+
+                    let maxC = max(r, g, b)
+                    let minC = min(r, g, b)
+                    let delta = maxC - minC
+                    let v = maxC
+                    let s = maxC == 0 ? 0 : delta / maxC
+
+                    var h = 0.0
+                    if delta > 0 {
+                        if maxC == r {
+                            h = 60 * (((g - b) / delta).truncatingRemainder(dividingBy: 6))
+                        } else if maxC == g {
+                            h = 60 * (((b - r) / delta) + 2)
+                        } else {
+                            h = 60 * (((r - g) / delta) + 4)
+                        }
+                        if h < 0 { h += 360 }
+                    }
+
+                    // Vivid near v=0.5, zero near v=0 or v=1 (shadows/highlights
+                    // can't read as "colorful" regardless of hue/saturation).
+                    let brightnessFactor = 1.0 - pow(2 * v - 1, 2)
+                    let weight = max(pow(s, 2.0) * brightnessFactor, 1e-6)
+
+                    let hRad = h * .pi / 180
+                    sumWeight += weight
+                    sumHueX += weight * cos(hRad)
+                    sumHueY += weight * sin(hRad)
+                    sumSatWeighted += weight * s
+                    sumValWeighted += weight * v
+                    count += 1
+                }
+            }
+            guard count > 0, sumWeight > 0 else { return .gray }
+
+            var meanHueDeg = atan2(sumHueY, sumHueX) * 180 / .pi
+            if meanHueDeg < 0 { meanHueDeg += 360 }
+            let meanSat = sumSatWeighted / sumWeight
+            let meanVal = sumValWeighted / sumWeight
+
+            // A region with no vivid pixels anywhere (even after the weighting
+            // above hunted for the most saturated ones) is genuinely
+            // monochrome — don't invent a hue/saturation that isn't there.
+            let isMonochrome = meanSat < 0.07
+
+            let finalSat = isMonochrome ? meanSat : min(1.0, max(meanSat * 1.2, 0.5))
+            // Remap (not clamp) brightness into a legible-but-lively band —
+            // a hard clamp would flatten every dark/bright region to the
+            // same plateau and kill the spatial "mesh" look.
+            let finalVal = 0.42 + meanVal * (0.80 - 0.42)
+
+            return Color(hue: meanHueDeg / 360, saturation: finalSat, brightness: finalVal)
         }
-        var buckets: [Int: Bucket] = [:]
-        let levels = bucketsPerChannel
-        let step = 256 / levels
 
-        var i = 0
-        while i < pixels.count {
-            let r = Int(pixels[i])
-            let g = Int(pixels[i + 1])
-            let b = Int(pixels[i + 2])
-            let a = pixels[i + 3]
-            i += 4
-            guard a > 16 else { continue }  // skip near-transparent pixels
+        let midX = width / 2
+        let midY = height / 2
+        let quarterW = max(1, width / 4)
+        let quarterH = max(1, height / 4)
 
-            let rBucket = min(levels - 1, r / step)
-            let gBucket = min(levels - 1, g / step)
-            let bBucket = min(levels - 1, b / step)
-            let key = (rBucket * levels + gBucket) * levels + bBucket
+        let topLeft = vividColor(xRange: 0..<midX, yRange: 0..<midY)
+        let topRight = vividColor(xRange: midX..<width, yRange: 0..<midY)
+        let bottomLeft = vividColor(xRange: 0..<midX, yRange: midY..<height)
+        let bottomRight = vividColor(xRange: midX..<width, yRange: midY..<height)
+        let center = vividColor(
+            xRange: max(0, midX - quarterW)..<min(width, midX + quarterW),
+            yRange: max(0, midY - quarterH)..<min(height, midY + quarterH)
+        )
 
-            var bucket = buckets[key] ?? Bucket()
-            bucket.count += 1
-            bucket.rSum += r
-            bucket.gSum += g
-            bucket.bSum += b
-            buckets[key] = bucket
-        }
-
-        guard !buckets.isEmpty else {
-            return WallpaperPalette(colors: [Color.gray])
-        }
-
-        let topBuckets = buckets.values.sorted { $0.count > $1.count }.prefix(resultCount)
-        let colors = topBuckets.map { bucket -> Color in
-            let n = Double(bucket.count)
-            return Color(
-                red: Double(bucket.rSum) / n / 255,
-                green: Double(bucket.gSum) / n / 255,
-                blue: Double(bucket.bSum) / n / 255
-            )
-        }
-        return WallpaperPalette(colors: colors.isEmpty ? [Color.gray] : colors)
+        return WallpaperPalette(colors: [topLeft, topRight, bottomLeft, bottomRight, center])
     }
 }

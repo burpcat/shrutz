@@ -222,6 +222,18 @@ assert d['mappings'] == []
 "
 }
 
+@test "weather --json: includes the full conditions vocabulary" {
+    "$SHRUTZ" weather location "42.36,-71.06"
+    "$SHRUTZ" weather on
+    run "$SHRUTZ" weather --json
+    [ "$status" -eq 0 ]
+    echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['conditions'] == ['clear', 'cloudy', 'fog', 'rain', 'snow', 'storm', 'night'], d
+"
+}
+
 @test "weather --json: mappings field reflects configured condition→set mappings" {
     _make_set rainy
     _make_set sunny

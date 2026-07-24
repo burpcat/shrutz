@@ -46,10 +46,12 @@ struct DaemonStatus: Codable {
     let loaded: Bool
     let pid: Int
     let lastExitStatus: Int
+    let autostartEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case loaded, pid
         case lastExitStatus = "last_exit_status"
+        case autostartEnabled = "autostart_enabled"
     }
 }
 
@@ -104,13 +106,14 @@ struct WeatherStatus: Codable {
     let autoSwitch: Bool
     let lastChecked: String
     let mappings: [WeatherMapping]
+    let conditions: [String]
 
     enum CodingKeys: String, CodingKey {
         case enabled, location, condition
         case temperatureF = "temperature_f"
         case autoSwitch = "auto_switch"
         case lastChecked = "last_checked"
-        case mappings
+        case mappings, conditions
     }
 }
 

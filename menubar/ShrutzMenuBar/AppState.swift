@@ -4,6 +4,7 @@ import AppKit
 /// Lets AppState (which has no AppKit imports) ask the AppDelegate to
 /// show/hide the status item, without AppState needing to know about
 /// NSStatusItem directly.
+@MainActor
 protocol MenuBarIconControlling: AnyObject {
     func setStatusItemVisible(_ visible: Bool)
 }
@@ -19,6 +20,11 @@ final class AppState: ObservableObject {
     @Published var lastError: String?
     @Published private(set) var shrutzInstalled: Bool = ShrutzCLI.isInstalled
     @Published private(set) var wallpaperPalette: WallpaperPalette?
+
+    /// The popover always opens collapsed (per the mockups: "shown slick,
+    /// after a click") — reset to false every time PanelWindowController
+    /// shows the panel, then flipped true when the collapsed tile is tapped.
+    @Published var panelIsExpanded = false
 
     weak var menuBarIconController: MenuBarIconControlling?
 
@@ -122,9 +128,18 @@ final class AppState: ObservableObject {
     }
 
     func switchSet(_ name: String) async { await runAction(["switch", name]) }
+    func createSet(_ name: String) async { await runAction(["set", "create", name]) }
+    func toggleShuffle(_ name: String, on: Bool) async { await runAction(["set", "shuffle", name, on ? "on" : "off"]) }
+    func deleteSet(_ name: String) async { await runAction(["set", "delete", name, "-y"]) }
     func startDaemon() async { await runAction(["start"]) }
     func stopDaemon() async { await runAction(["stop"]) }
     func setConfig(_ key: String, _ value: Int) async { await runAction(["config", key, String(value)]) }
+
+    /// "Launch at login" mirrors the daemon's own launchd registration
+    /// (RunAtLoad), not a separate app-only login item — the daemon
+    /// already auto-launches the menu bar app on startup, so toggling just
+    /// this one thing is what makes "app and daemon move together."
+    func setAutostart(_ enabled: Bool) async { await runAction(["autostart", enabled ? "on" : "off"]) }
 
     func setWeatherEnabled(_ enabled: Bool) async { await runAction(["weather", enabled ? "on" : "off"]) }
     func setWeatherLocation(_ input: String) async { await runAction(["weather", "location", input]) }

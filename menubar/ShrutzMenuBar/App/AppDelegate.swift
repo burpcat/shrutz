@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MenuBarIconControlling
 
         #if DEBUG
         Typography.assertFontsResolve()
+        AppIconBaker.bakeIfRequested()
         #endif
     }
 
