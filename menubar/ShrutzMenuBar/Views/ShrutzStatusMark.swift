@@ -9,7 +9,7 @@ enum ShrutzStatusMarkRenderer {
     @MainActor
     static func makeImage(pointSize: CGFloat = 18) -> NSImage {
         let view = Text("S")
-            .font(.shrutzWordmarkScript(pointSize * 2.0))
+            .font(.shrutzWordmarkScript(pointSize * ShrutzWordmarkMetrics.scriptScale))
             .foregroundColor(.black)
             .fixedSize()
             .padding(.horizontal, 2)

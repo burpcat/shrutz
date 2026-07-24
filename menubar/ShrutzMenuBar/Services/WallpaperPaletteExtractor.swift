@@ -76,23 +76,76 @@ enum WallpaperPaletteExtractor {
         }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        func averageColor(xRange: Range<Int>, yRange: Range<Int>) -> Color {
-            var rSum = 0, gSum = 0, bSum = 0, count = 0
+        // Saturation-weighted HSB centroid, not a flat RGB mean: a region
+        // containing skin tone + shadow + highlight averages, in RGB, to a
+        // desaturated muddy midtone. Weighting each pixel by how vivid it
+        // already is (and letting near-black/near-white pixels drop out
+        // entirely) lets the region's real accent color win instead of
+        // being diluted by its own shadows/highlights.
+        func vividColor(xRange: Range<Int>, yRange: Range<Int>) -> Color {
+            var sumWeight = 0.0
+            var sumHueX = 0.0, sumHueY = 0.0
+            var sumSatWeighted = 0.0, sumValWeighted = 0.0
+            var count = 0
+
             for y in yRange {
                 for x in xRange {
                     let i = (y * width + x) * 4
-                    rSum += Int(pixels[i])
-                    gSum += Int(pixels[i + 1])
-                    bSum += Int(pixels[i + 2])
+                    let r = Double(pixels[i]) / 255
+                    let g = Double(pixels[i + 1]) / 255
+                    let b = Double(pixels[i + 2]) / 255
+
+                    let maxC = max(r, g, b)
+                    let minC = min(r, g, b)
+                    let delta = maxC - minC
+                    let v = maxC
+                    let s = maxC == 0 ? 0 : delta / maxC
+
+                    var h = 0.0
+                    if delta > 0 {
+                        if maxC == r {
+                            h = 60 * (((g - b) / delta).truncatingRemainder(dividingBy: 6))
+                        } else if maxC == g {
+                            h = 60 * (((b - r) / delta) + 2)
+                        } else {
+                            h = 60 * (((r - g) / delta) + 4)
+                        }
+                        if h < 0 { h += 360 }
+                    }
+
+                    // Vivid near v=0.5, zero near v=0 or v=1 (shadows/highlights
+                    // can't read as "colorful" regardless of hue/saturation).
+                    let brightnessFactor = 1.0 - pow(2 * v - 1, 2)
+                    let weight = max(pow(s, 2.0) * brightnessFactor, 1e-6)
+
+                    let hRad = h * .pi / 180
+                    sumWeight += weight
+                    sumHueX += weight * cos(hRad)
+                    sumHueY += weight * sin(hRad)
+                    sumSatWeighted += weight * s
+                    sumValWeighted += weight * v
                     count += 1
                 }
             }
-            guard count > 0 else { return .gray }
-            return Color(
-                red: Double(rSum) / Double(count) / 255,
-                green: Double(gSum) / Double(count) / 255,
-                blue: Double(bSum) / Double(count) / 255
-            )
+            guard count > 0, sumWeight > 0 else { return .gray }
+
+            var meanHueDeg = atan2(sumHueY, sumHueX) * 180 / .pi
+            if meanHueDeg < 0 { meanHueDeg += 360 }
+            let meanSat = sumSatWeighted / sumWeight
+            let meanVal = sumValWeighted / sumWeight
+
+            // A region with no vivid pixels anywhere (even after the weighting
+            // above hunted for the most saturated ones) is genuinely
+            // monochrome — don't invent a hue/saturation that isn't there.
+            let isMonochrome = meanSat < 0.07
+
+            let finalSat = isMonochrome ? meanSat : min(1.0, max(meanSat * 1.2, 0.5))
+            // Remap (not clamp) brightness into a legible-but-lively band —
+            // a hard clamp would flatten every dark/bright region to the
+            // same plateau and kill the spatial "mesh" look.
+            let finalVal = 0.42 + meanVal * (0.80 - 0.42)
+
+            return Color(hue: meanHueDeg / 360, saturation: finalSat, brightness: finalVal)
         }
 
         let midX = width / 2
@@ -100,11 +153,11 @@ enum WallpaperPaletteExtractor {
         let quarterW = max(1, width / 4)
         let quarterH = max(1, height / 4)
 
-        let topLeft = averageColor(xRange: 0..<midX, yRange: 0..<midY)
-        let topRight = averageColor(xRange: midX..<width, yRange: 0..<midY)
-        let bottomLeft = averageColor(xRange: 0..<midX, yRange: midY..<height)
-        let bottomRight = averageColor(xRange: midX..<width, yRange: midY..<height)
-        let center = averageColor(
+        let topLeft = vividColor(xRange: 0..<midX, yRange: 0..<midY)
+        let topRight = vividColor(xRange: midX..<width, yRange: 0..<midY)
+        let bottomLeft = vividColor(xRange: 0..<midX, yRange: midY..<height)
+        let bottomRight = vividColor(xRange: midX..<width, yRange: midY..<height)
+        let center = vividColor(
             xRange: max(0, midX - quarterW)..<min(width, midX + quarterW),
             yRange: max(0, midY - quarterH)..<min(height, midY + quarterH)
         )

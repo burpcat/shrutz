@@ -101,7 +101,7 @@ private struct WeatherMappingEditor: View {
                 .foregroundColor(ShrutzPalette.textSecondary)
 
             Menu {
-                ForEach(WeatherCondition.allCases, id: \.self) { condition in
+                ForEach(weather.conditions.compactMap(WeatherCondition.init), id: \.self) { condition in
                     Button(condition.label) { selectedCondition = condition }
                 }
             } label: {
@@ -118,8 +118,13 @@ private struct WeatherMappingEditor: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .background(LinearGradient(colors: selectedCondition.tint, startPoint: .topLeading, endPoint: .bottomTrailing))
-        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
+        .background(
+            ZStack {
+                LinearGradient(colors: selectedCondition.tint, startPoint: .topLeading, endPoint: .bottomTrailing)
+                Rectangle().fill(.ultraThinMaterial)
+            }
+        )
+        .zoneCardBorder()
     }
 
     private var bottomZone: some View {
@@ -163,7 +168,7 @@ private struct WeatherMappingEditor: View {
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
         .background(mappedPalette == nil ? AnyView(ShrutzPalette.pausedGlass) : AnyView(FrostedTintBackground(palette: mappedPalette)))
-        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
+        .zoneCardBorder()
     }
 
     @State private var mappedPalette: WallpaperPalette?
@@ -199,8 +204,8 @@ private struct WeatherFilmstripThumbnail: View {
                 Shimmer()
             }
         }
-        .frame(width: 60, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail))
+        .frame(width: 64, height: 64 / ShrutzPalette.thumbnailAspectRatio)
+        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail, style: .continuous))
         .task(id: path) {
             image = await ThumbnailCache.shared.thumbnail(for: path)
         }

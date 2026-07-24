@@ -1262,7 +1262,8 @@ cmd_weather_status() {
         fi
 
         WJ_ENABLED="$enabled" WJ_LOCATION="$WEATHER_LOCATION_LABEL" WJ_CONDITION="$WEATHER_LAST_CONDITION" \
-        WJ_TEMPF="$WEATHER_LAST_TEMP_F" WJ_CHECKED="$last_checked" WJ_MAPPINGS="$mappings_blob" python3 << 'PYEOF'
+        WJ_TEMPF="$WEATHER_LAST_TEMP_F" WJ_CHECKED="$last_checked" WJ_MAPPINGS="$mappings_blob" \
+        WJ_CONDITIONS="${WEATHER_CONDITIONS[*]}" python3 << 'PYEOF'
 import json, os
 
 def as_bool(v): return v == "true"
@@ -1288,6 +1289,7 @@ print(json.dumps({
     "auto_switch": enabled,
     "last_checked": os.environ['WJ_CHECKED'],
     "mappings": mappings,
+    "conditions": os.environ['WJ_CONDITIONS'].split(),
 }))
 PYEOF
         return

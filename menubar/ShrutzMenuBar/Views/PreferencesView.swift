@@ -17,7 +17,7 @@ struct PreferencesView: View {
             FrostedTintBackground(palette: appState.wallpaperPalette, isPaused: appState.now?.paused ?? false)
 
             VStack(spacing: 16) {
-                ShrutzWordmark(size: 22)
+                ShrutzWordmark(size: 40)
                     .padding(.top, 20)
 
                 pillTabBar
@@ -62,31 +62,38 @@ struct PreferencesView: View {
 
 struct GeneralPreferencesView: View {
     @EnvironmentObject var appState: AppState
+    @State private var showLaunchAtLoginHelp = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 24) {
                 launchAtLoginRow
+                    .padding(16)
+                    .glassCard()
 
                 if appState.config != nil {
-                    RotaryDurationDial(
-                        label: "Active-use time before switch",
-                        value: configBinding("ACTIVE_MINS", get: \.activeMins),
-                        range: 1...180, step: 1, unit: "min",
-                        helpText: "Minutes of actual keyboard/mouse use before the wallpaper advances — time away from the machine doesn't count."
-                    )
-                    RotaryDurationDial(
-                        label: "Idle threshold",
-                        value: configBinding("IDLE_THRESHOLD", get: \.idleThreshold),
-                        range: 5...600, step: 5, unit: "sec",
-                        helpText: "Seconds of no input before you're counted as away and the clock freezes."
-                    )
-                    RotaryDurationDial(
-                        label: "Check interval",
-                        value: configBinding("CHECK_EVERY", get: \.checkEvery),
-                        range: 5...300, step: 5, unit: "sec",
-                        helpText: "How often the daemon polls idle time and re-checks the visible wallpaper."
-                    )
+                    VStack(alignment: .leading, spacing: 22) {
+                        RotaryDurationDial(
+                            label: "Active-use time before switch",
+                            value: configBinding("ACTIVE_MINS", get: \.activeMins),
+                            range: 1...180, step: 1, unit: "min",
+                            helpText: "Minutes of actual keyboard/mouse use before the wallpaper advances — time away from the machine doesn't count."
+                        )
+                        RotaryDurationDial(
+                            label: "Idle threshold",
+                            value: configBinding("IDLE_THRESHOLD", get: \.idleThreshold),
+                            range: 5...600, step: 5, unit: "sec",
+                            helpText: "Seconds of no input before you're counted as away and the clock freezes."
+                        )
+                        RotaryDurationDial(
+                            label: "Check interval",
+                            value: configBinding("CHECK_EVERY", get: \.checkEvery),
+                            range: 5...300, step: 5, unit: "sec",
+                            helpText: "How often the daemon polls idle time and re-checks the visible wallpaper."
+                        )
+                    }
+                    .padding(16)
+                    .glassCard()
                 }
             }
             .padding(24)
@@ -99,13 +106,20 @@ struct GeneralPreferencesView: View {
                 Text("Launch at login")
                     .font(.system(size: 13))
                     .foregroundColor(ShrutzPalette.textPrimary)
-                Button {} label: {
+                Button {
+                    showLaunchAtLoginHelp = true
+                } label: {
                     Image(systemName: "info.circle")
                         .font(.system(size: 12))
                         .foregroundColor(ShrutzPalette.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help("Starts the shrutz daemon — and this app, which the daemon launches on its own — automatically every time you log in.")
+                .popover(isPresented: $showLaunchAtLoginHelp, arrowEdge: .top) {
+                    Text("Starts the shrutz daemon — and this app, which the daemon launches on its own — automatically every time you log in.")
+                        .font(.system(size: 12))
+                        .padding(10)
+                        .frame(maxWidth: 220)
+                }
             }
             Spacer()
             Toggle("", isOn: Binding(
@@ -133,14 +147,17 @@ struct SetsPreferencesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 20) {
                 HStack {
                     Spacer()
                     Button("+ New set") { showingNewSetSheet = true }
                         .buttonStyle(.plain)
-                        .font(.shrutzSmallCaps(15))
+                        .font(.shrutzSmallCaps(13, weight: .medium))
                         .tracking(1.2)
-                        .foregroundColor(ShrutzPalette.accent)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(ShrutzPalette.accent))
                 }
 
                 if appState.sets.isEmpty {
@@ -220,8 +237,7 @@ struct SetsPreferencesView: View {
             }
             .padding(14)
         }
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
+        .glassCard()
         .contentShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
         .onTapGesture {
             guard !set.active else { return }
@@ -248,8 +264,8 @@ private struct FilmstripThumbnail: View {
                 Shimmer()
             }
         }
-        .frame(width: 72, height: 48)
-        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail))
+        .frame(width: 72, height: 72 / ShrutzPalette.thumbnailAspectRatio)
+        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail, style: .continuous))
         .task(id: path) {
             image = await ThumbnailCache.shared.thumbnail(for: path)
         }

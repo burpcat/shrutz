@@ -33,8 +33,7 @@ private struct GalleryDisclaimerView: View {
                     .tint(ShrutzPalette.accent)
             }
             .padding(28)
-            .background(Color.white.opacity(0.7))
-            .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
+            .glassCard()
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -58,8 +57,8 @@ private struct GalleryListView: View {
             if loading && entries.isEmpty {
                 ProgressView("Loading gallery…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error = errorMessage {
-                Text(error).foregroundColor(.red)
+            } else if errorMessage != nil {
+                errorCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -75,13 +74,31 @@ private struct GalleryListView: View {
         .task { await load() }
     }
 
+    private var errorCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 26))
+                .foregroundColor(ShrutzPalette.textSecondary)
+            Text("Couldn't load the gallery — check your connection")
+                .font(.system(size: 13))
+                .foregroundColor(ShrutzPalette.textPrimary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 240)
+            Button("Try again") { Task { await load() } }
+                .buttonStyle(.borderedProminent)
+                .tint(ShrutzPalette.accent)
+        }
+        .padding(28)
+        .glassCard()
+    }
+
     private func entryCard(_ entry: GalleryEntry) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 GalleryThumbnail(urlString: entry.thumbnailUrl)
-                    .frame(height: 90)
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail))
+                    .aspectRatio(ShrutzPalette.thumbnailAspectRatio, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusThumbnail, style: .continuous))
 
                 if entry.installed {
                     Button {
@@ -120,8 +137,7 @@ private struct GalleryListView: View {
             actionControl(entry)
         }
         .padding(10)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: ShrutzPalette.cornerRadiusCard))
+        .glassCard()
     }
 
     @ViewBuilder

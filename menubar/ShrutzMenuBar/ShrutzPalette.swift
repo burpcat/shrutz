@@ -36,4 +36,9 @@ enum ShrutzPalette {
     static let cornerRadiusWindow: CGFloat = 20
     static let cornerRadiusCard: CGFloat = 16
     static let cornerRadiusThumbnail: CGFloat = 13
+
+    /// The one thumbnail aspect ratio (16:10, matching displays) used
+    /// everywhere a wallpaper preview appears — popover, every filmstrip,
+    /// and the Creators Publish catalog grid. No mixed aspect ratios.
+    static let thumbnailAspectRatio: CGFloat = 1.6
 }

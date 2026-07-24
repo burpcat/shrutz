@@ -63,6 +63,8 @@ struct ShrutzPanelView: View {
                 Image(systemName: "asterisk")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(ShrutzPalette.accent)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.white.opacity(0.12)))
             }
             .buttonStyle(.plain)
         }
@@ -71,8 +73,8 @@ struct ShrutzPanelView: View {
     private var middleRow: some View {
         HStack(spacing: 10) {
             PanelThumbnail(path: appState.now?.wallpaperPath)
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .frame(width: 56, height: 56 / ShrutzPalette.thumbnailAspectRatio)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(appState.now?.set ?? "—")
@@ -80,6 +82,9 @@ struct ShrutzPanelView: View {
                     .foregroundColor(ShrutzPalette.textPrimary)
                     .textScrim()
                 progressBar
+                Text(remainingLabel)
+                    .font(.system(size: 10))
+                    .foregroundColor(ShrutzPalette.textSecondary)
             }
         }
     }
@@ -97,6 +102,14 @@ struct ShrutzPanelView: View {
             }
         }
         .frame(height: 4)
+    }
+
+    /// A clean "12 min left"-style label — never a raw percentage, which
+    /// reads as a debug value.
+    private var remainingLabel: String {
+        guard let remaining = appState.now?.secondsRemaining else { return "—" }
+        let minutes = Int((Double(remaining) / 60).rounded(.up))
+        return minutes < 1 ? "<1 min left" : "\(minutes) min left"
     }
 
     private var transportRow: some View {

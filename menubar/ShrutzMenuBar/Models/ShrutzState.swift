@@ -106,13 +106,14 @@ struct WeatherStatus: Codable {
     let autoSwitch: Bool
     let lastChecked: String
     let mappings: [WeatherMapping]
+    let conditions: [String]
 
     enum CodingKeys: String, CodingKey {
         case enabled, location, condition
         case temperatureF = "temperature_f"
         case autoSwitch = "auto_switch"
         case lastChecked = "last_checked"
-        case mappings
+        case mappings, conditions
     }
 }
 

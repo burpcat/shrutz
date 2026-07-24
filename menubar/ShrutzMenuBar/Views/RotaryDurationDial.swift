@@ -1,11 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// A compact tactile rotary dial (mockup 03: ~48pt, dark fill, a big
-/// centered number + tiny unit label, a thin red progress arc around the
-/// rim) used for every duration/tunable in the General tab instead of a
-/// plain stepper. Drag radius controls sensitivity: near the center moves
-/// in big, coarse jumps; out toward the rim moves in small, fine
+/// A compact tactile rotary dial (mockup 02: ~52pt, light glassy fill, a
+/// big centered number + tiny unit label, a thin red progress arc around
+/// the rim) used for every duration/tunable in the General tab instead of
+/// a plain stepper. Drag radius controls sensitivity: near the center
+/// moves in big, coarse jumps; out toward the rim moves in small, fine
 /// increments.
 struct RotaryDurationDial: View {
     let label: String
@@ -20,7 +20,7 @@ struct RotaryDurationDial: View {
     @State private var dragStartAngle: Double?
     @State private var lastSnappedValue: Int?
 
-    private let diameter: CGFloat = 48
+    private let diameter: CGFloat = 52
 
     var body: some View {
         HStack {
@@ -51,21 +51,25 @@ struct RotaryDurationDial: View {
     private var dial: some View {
         ZStack {
             Circle()
-                .fill(Color.black.opacity(0.82))
+                .fill(.regularMaterial)
+            Circle()
+                .fill(Color.white.opacity(0.22))
+            Circle()
+                .strokeBorder(Color.white.opacity(0.5), lineWidth: 1)
 
             Circle()
                 .trim(from: 0, to: progressFraction)
                 .stroke(ShrutzPalette.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .padding(2.5)
+                .padding(3)
 
             VStack(spacing: 0) {
                 Text("\(value)")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.black.opacity(0.85))
                 Text(unit)
-                    .font(.system(size: 8))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.system(size: 9))
+                    .foregroundColor(.black.opacity(0.55))
             }
         }
         .frame(width: diameter, height: diameter)

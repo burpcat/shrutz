@@ -1,24 +1,23 @@
 import SwiftUI
 
-/// The ambient frosted-glass wash behind every surface (popover + Settings
-/// window alike): a heavily blurred, low-res gradient mesh sampled from
-/// the current wallpaper's actual regions, drifting slowly, behind
-/// `.ultraThinMaterial`. Falls back to a flat, fully desaturated grey when
-/// `isPaused` (Appendix A: `#C9C7C4`). Deployment target is macOS 14.0, so
-/// SwiftUI `MeshGradient` (macOS 15+) isn't available — this uses
-/// heavily-blurred animated color circles, positioned to match the
-/// wallpaper's own quadrant/center tones, as the documented fallback.
-struct FrostedTintBackground: View {
-    let palette: WallpaperPalette?
+/// The 5-blob drifting color mesh shared by the live ambient glass
+/// (`FrostedTintBackground`, layered under `.ultraThinMaterial`) and the
+/// static app-icon artwork (`AppIconArtwork`, which can't use a live
+/// `Material` in an offscreen `ImageRenderer` snapshot — see that file's
+/// doc comment — and layers a plain translucent overlay instead). Kept
+/// separate so both share the exact same vivid-compositing fix rather than
+/// risking two independently-tuned copies drifting apart. Deployment
+/// target is macOS 14.0, so SwiftUI `MeshGradient` (macOS 15+) isn't
+/// available — heavily-blurred animated color circles are the documented
+/// fallback.
+struct AmbientMesh: View {
+    let palette: WallpaperPalette
     var isPaused: Bool = false
+    /// Disable the slow positional drift for a one-shot static render
+    /// (the app icon) where no animation will ever actually play.
+    var animated: Bool = true
 
     @State private var drift = false
-
-    private static let calm = WallpaperPalette(colors: Array(repeating: ShrutzPalette.pausedGlass, count: 5))
-
-    private var active: WallpaperPalette {
-        isPaused ? Self.calm : (palette ?? Self.calm)
-    }
 
     var body: some View {
         GeometryReader { geo in
@@ -27,23 +26,33 @@ struct FrostedTintBackground: View {
             let blobSize = max(w, h) * 1.1
 
             ZStack {
-                blob(active.topLeft, blobSize: blobSize, at: CGPoint(x: 0, y: 0), in: geo.size)
-                blob(active.topRight, blobSize: blobSize, at: CGPoint(x: w, y: 0), in: geo.size)
-                blob(active.bottomLeft, blobSize: blobSize, at: CGPoint(x: 0, y: h), in: geo.size)
-                blob(active.bottomRight, blobSize: blobSize, at: CGPoint(x: w, y: h), in: geo.size)
-                blob(active.center, blobSize: blobSize * 0.7, at: CGPoint(x: w / 2, y: h / 2), in: geo.size)
+                blob(palette.topLeft, blobSize: blobSize, at: CGPoint(x: 0, y: 0), in: geo.size)
+                blob(palette.topRight, blobSize: blobSize, at: CGPoint(x: w, y: 0), in: geo.size)
+                blob(palette.bottomLeft, blobSize: blobSize, at: CGPoint(x: 0, y: h), in: geo.size)
+                blob(palette.bottomRight, blobSize: blobSize, at: CGPoint(x: w, y: h), in: geo.size)
+                blob(palette.center, blobSize: blobSize * 0.7, at: CGPoint(x: w / 2, y: h / 2), in: geo.size)
             }
             .frame(width: w, height: h)
             .clipped()
+            // .compositingGroup() flattens the 5 blobs into one bitmap using
+            // .plusLighter *among themselves* before that flattened result
+            // composites (normally) against whatever's layered on top/below.
+            // Without it, overlapping blobs would alpha-blend toward grey
+            // exactly like the old flat-mean color sampling did, just at
+            // compositing time instead of extraction time. .saturation
+            // counteracts a Material's own vibrancy desaturation, where one
+            // is present above this mesh.
+            .compositingGroup()
+            .blendMode(isPaused ? .normal : .plusLighter)
+            .saturation(isPaused ? 1.0 : 1.3)
         }
         .animation(.easeInOut(duration: 0.6), value: isPaused)
-        .animation(.easeInOut(duration: 1.1), value: active)
         .onAppear {
+            guard animated else { return }
             withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) {
                 drift = true
             }
         }
-        .background(.ultraThinMaterial)
     }
 
     private func blob(_ color: Color, blobSize: CGFloat, at point: CGPoint, in size: CGSize) -> some View {
@@ -61,9 +70,30 @@ struct FrostedTintBackground: View {
             .fill(color)
             .frame(width: blobSize, height: blobSize)
             .blur(radius: blobSize * 0.35)
-            .opacity(isPaused ? 0.5 : 0.75)
+            .opacity(isPaused ? 0.5 : 0.6)
             .position(point)
             .offset(offset)
+    }
+}
+
+/// The ambient frosted-glass wash behind every surface (popover + Settings
+/// window alike): `AmbientMesh` sampled from the current wallpaper's
+/// actual regions, behind `.ultraThinMaterial`. Falls back to a flat,
+/// fully desaturated grey when `isPaused` (Appendix A: `#C9C7C4`).
+struct FrostedTintBackground: View {
+    let palette: WallpaperPalette?
+    var isPaused: Bool = false
+
+    private static let calm = WallpaperPalette(colors: Array(repeating: ShrutzPalette.pausedGlass, count: 5))
+
+    private var active: WallpaperPalette {
+        isPaused ? Self.calm : (palette ?? Self.calm)
+    }
+
+    var body: some View {
+        AmbientMesh(palette: active, isPaused: isPaused)
+            .animation(.easeInOut(duration: 1.1), value: active)
+            .background(.ultraThinMaterial)
     }
 }
 
